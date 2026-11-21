@@ -14,7 +14,7 @@
 
    Bump VERSION on release and the old cache is dropped on activate. */
 
-const VERSION = 'brokeinsf-20261121150210';   // bump on release; drops the old cache
+const VERSION = 'brokeinsf-20261121150736';   // bump on release; drops the old cache
 const SHELL = [
   './',
   './index.html',

@@ -168,11 +168,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261121150210';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121150210';
-import { drawVehicle, BAG } from './traffic.js?v=20261121150210';
-import * as G from './game.js?v=20261121150210';
-import * as SND from './sound.js?v=20261121150210';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261121150736';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121150736';
+import { drawVehicle, BAG } from './traffic.js?v=20261121150736';
+import * as G from './game.js?v=20261121150736';
+import * as SND from './sound.js?v=20261121150736';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -1257,6 +1257,26 @@ function paint() {
       cx.beginPath(); cx.arc(x, y, r + 7 + Math.sin(Date.now()/280)*2.5, 0, 7);
       cx.fillStyle = 'rgba(168,69,31,.2)'; cx.fill();
     }
+
+    /* ---- the places that would have you ----
+       Telling the player "hand it in at the green pins" only works if they
+       already know which pins are green and what green means, and the map
+       key that says so is at the bottom of a panel most people never open.
+       Somebody who built this game still had to ask where the resume goes.
+
+       So while you are carrying a resume and have no job, the hiring places
+       light up by themselves — and the ones that actually want what is on
+       your resume light up hardest. It is the same halo the delivery target
+       already uses, so it is a language the player has met. It stops the
+       moment you are hired, and a place you have already handed one to
+       today goes quiet. */
+    if (!target && p.kind === 'work' && s.resume && !s.job &&
+        !s.applied.includes(p.id)) {
+      const hits = G.matchAt(s, p).hits;
+      const pulse = Math.sin(Date.now() / 420 + x * 0.05) * 2 + 2;
+      cx.beginPath(); cx.arc(x, y, r + 4 + hits * 2.5 + pulse, 0, 7);
+      cx.fillStyle = `rgba(31,111,92,${0.1 + hits * 0.07})`; cx.fill();
+    }
     cx.beginPath(); cx.arc(x, y, r, 0, 7);
     cx.fillStyle = '#fffdf8'; cx.fill();
     cx.strokeStyle = col; cx.lineWidth = Math.max(2, 2.6 * SCALE); cx.stroke();
@@ -1803,7 +1823,12 @@ $('me').onclick = () => {
   $('rsave').onclick = () => {
     const tags = [...sheet.querySelectorAll('.tag.on')].map(t => t.dataset.t);
     G.setResume(s, { name: $('rname').value, tags });
-    flash('Resume saved. Now go and hand it to someone.', 'good');
+    /* "Go and hand it to someone" was true and useless — it named neither
+       how many places would take it nor where any of them were. */
+    const hiring = PLACES.filter(q => q.kind === 'work');
+    const good = hiring.filter(q => G.matchAt(s, q).hits >= 2).length;
+    flash(`Resume saved. ${hiring.length} places are hiring, lit up on the map` +
+          `${good ? ` — ${good} of them want exactly this` : ''}.`, 'good');
     close(); hud(); persist();
   };
 };
