@@ -168,11 +168,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261121144408';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121144408';
-import { drawVehicle, BAG } from './traffic.js?v=20261121144408';
-import * as G from './game.js?v=20261121144408';
-import * as SND from './sound.js?v=20261121144408';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261121144800';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121144800';
+import { drawVehicle, BAG } from './traffic.js?v=20261121144800';
+import * as G from './game.js?v=20261121144800';
+import * as SND from './sound.js?v=20261121144800';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -811,7 +811,7 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
      from. At #e8e3d7 against a #eceade pavement the two were a shade apart,
      so the streets did not read as streets and the buildings sat on them
      like ghosts. Yards are a touch darker and cooler than the pavement now. */
-  b.fillStyle = '#e1ddcd';
+  b.fillStyle = '#e9e5d5';
   b.fillRect(0, 0, WORLD.w, WORLD.h);
 
   const trace = st => {
@@ -827,8 +827,8 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
   for (const pass of [0, 1]) {
     for (const st of STREETS) {
       const w = ROADW[st.kind] || 19;
-      b.strokeStyle = pass === 0 ? '#f0eee3'
-        : st.kind === 'arterial' ? '#a9a69d' : '#b9b6ae';
+      b.strokeStyle = pass === 0 ? '#f5f3e8'
+        : st.kind === 'arterial' ? '#b4b1a8' : '#c4c1b9';
       b.lineWidth = pass === 0 ? w + 5.5 : w;
       trace(st); b.stroke();
     }
@@ -937,7 +937,7 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
 
   /* Open ground. */
   for (const k of PARKS) {
-    b.fillStyle = '#cfd8bf';
+    b.fillStyle = '#d9e2c9';
     b.fillRect(k.x, k.y, k.w, k.h);
     b.strokeStyle = 'rgba(108,118,88,.3)'; b.lineWidth = 1;
     b.strokeRect(k.x + .5, k.y + .5, k.w - 1, k.h - 1);
@@ -945,7 +945,7 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
 
   /* Every shadow in the city falls the same way, from the north-west, so the
      blocks read as solid things standing up rather than as paper shapes. */
-  b.fillStyle = 'rgba(70,64,50,.27)';
+  b.fillStyle = 'rgba(70,64,50,.19)';
   for (const bl of BUILDINGS) {
     b.save();
     /* A taller building throws a longer shadow, which is most of what
@@ -960,12 +960,18 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
      quarter of the buildings take a muted colour, because a San Francisco
      block that is all one tone is a San Francisco block nobody would
      recognise. Kept desaturated: the map still has to read at a glance. */
-  /* Pitched against the #e1ddcd of the block they stand on. The first set
+  /* Pitched against the ground they stand on — and lifted once, as a set,
+     after the whole map came out reading dim on a bright display. Making
+     the blocks "more apparent" had meant darkening the bodies, the
+     shadows, the outlines, the facades and the ground all at once, and
+     cumulatively that is not contrast, it is gloom. Brightness and
+     contrast are separate dials: everything here moved up together, so
+     the gaps between roof, facade and street are the same as they were. The first set
      of tones sat four or five steps off the ground colour and the whole
      city read as a watermark — at map scale a building is twenty pixels
      wide and has to carry at that size or it is not there at all. */
-  const PLAIN = ['#c2b9a2', '#b8af97', '#cac1aa', '#bcb39b', '#c6bda6'];
-  const PAINT = ['#cbb3a7', '#b3c2ad', '#acbcc6', '#d6c498', '#c2adb9'];
+  const PLAIN = ['#d1c8b1', '#c7bea6', '#d9d0b9', '#cbc2aa', '#d5ccb5'];
+  const PAINT = ['#dac2b6', '#c2d1bc', '#bbcbd5', '#e5d3a7', '#d1bcc8'];
   /* Darker, for anything facing you rather than facing the sky. */
   const shade = (hex, f) => {
     const n = parseInt(hex.slice(1), 16);
@@ -994,7 +1000,7 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
     /* The facade has to separate from its own roof at twenty pixels wide.
        At 0.80 the two were a shade apart and the building read as a flat
        rectangle with a stripe on it. */
-    b.fillStyle = shade(body, 0.66);
+    b.fillStyle = shade(body, 0.74);
     b.fillRect(-hw, -hd, bl.w, ht);
     b.fillStyle = body;
     b.fillRect(-hw, -hd + ht, bl.w, bl.d - ht);
@@ -1028,7 +1034,7 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
     }
 
     /* Every footprint gets an edge, or a row of them merges into one slab. */
-    b.strokeStyle = 'rgba(58,52,40,.44)'; b.lineWidth = 0.85;
+    b.strokeStyle = 'rgba(58,52,40,.34)'; b.lineWidth = 0.85;
     b.strokeRect(-hw + .42, -hd + .42, bl.w - .84, bl.d - .84);
 
     /* A stair bulkhead or a lightwell on the bigger roofs. */
@@ -1052,7 +1058,7 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
     const cx0 = k.x + k.w / 2, cy0 = k.y + k.h / 2;
     b.save();
     if (k.kind === 'coit' || k.kind === 'lookout') {
-      b.fillStyle = '#ccd6bc';
+      b.fillStyle = '#d6e0c6';
       b.beginPath(); b.ellipse(cx0, cy0, k.w / 2, k.h / 2, 0, 0, 7); b.fill();
       b.strokeStyle = 'rgba(106,118,86,.3)'; b.lineWidth = 1;
       b.beginPath(); b.ellipse(cx0, cy0 - 4, k.w / 2 - 5, k.h / 2 - 5, 0, 0, 7); b.stroke();
@@ -1146,7 +1152,7 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
       b.fillRect(tx - 1.4, ty, TW + 2.8, 2.2);
     }
     if (k.kind === 'square') {
-      b.fillStyle = '#cfd8bf';
+      b.fillStyle = '#d9e2c9';
       b.fillRect(k.x, k.y, k.w, k.h);
       b.strokeStyle = 'rgba(108,118,88,.3)'; b.lineWidth = 1;
       b.strokeRect(k.x + .5, k.y + .5, k.w - 1, k.h - 1);
@@ -1223,7 +1229,7 @@ function paint() {
      rebuilt, and the mismatch drew a hard vertical seam down the screen
      wherever the view ran past the edge of the world — which is now most
      of the time out by the Ferry Building and Union Square. */
-  cx.fillStyle = '#e1ddcd'; cx.fillRect(0, 0, VW, VH);
+  cx.fillStyle = '#e9e5d5'; cx.fillRect(0, 0, VW, VH);
 
   /* one blit for the whole city */
   const sx = (cam.x - VW / (2 * SCALE)) * Q, sy = (cam.y - VH / (2 * SCALE)) * Q;
@@ -2224,7 +2230,13 @@ function hostCard() {
       <button class="host" data-h="${h.id}">
         ${faceSVG(h.id)}<span>${h.name}</span>
       </button>`).join('')}</div>`);
+  /* This one you have to answer. open() hangs close() on the veil like
+     every other sheet, so a tap outside dismissed the card without a
+     choice — and it is only ever raised once, so s.host stayed null, the
+     game quietly fell back to Dre, and there was no way back to it. */
+  veil.onclick = null;
   sheet.querySelectorAll('[data-h]').forEach(b => b.onclick = () => {
+    veil.onclick = close;
     s.host = b.dataset.h;
     /* The place on the map is named after whoever you picked. */
     const couchPlace = PLACES.find(p => p.id === 'couch');
@@ -2234,8 +2246,10 @@ function hostCard() {
   });
 }
 
-if (!s.log.length) {
-  G.say(s, 'You got in last night.', '');
+/* Ask whenever there is no host, not only on a fresh save — otherwise a
+   run that lost the card to a stray tap can never be given one. */
+if (!s.host) {
+  if (!s.log.length) G.say(s, 'You got in last night.', '');
   hostCard();
 } else if (s.host) {
   PLACES.find(p => p.id === 'couch').name = `${G.hostOf(s).name}'s place`;
