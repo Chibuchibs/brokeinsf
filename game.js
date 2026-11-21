@@ -9,7 +9,7 @@
    that cost you are city things — a Waymo stopped dead in the crosswalk, a
    wallet left on a counter, fog, a bus that never comes, the rent itself. */
 
-import { PLACES } from './city.js?v=20261121143944';
+import { PLACES } from './city.js?v=20261121144408';
 
 export const DAY_START = 7 * 60;          // 07:00, in minutes
 export const DAY_END   = 23 * 60;         // 23:00 — the day ends whether you like it or not
@@ -113,10 +113,15 @@ export const RUNGS = [
   /* "Make your first $100" was written when you arrived with $180 and it was
      the whole game. Against the $2,000 you now land with it reads as nonsense
      — the player is holding twenty times the target. What is actually true on
-     day one is that none of that money is yours to keep: it is rent you have
-     not paid yet. */
+     day one is that none of that money is yours to keep.
+
+     "Every dollar is rent you have not paid yet" said that, but it made the
+     reader stop and work out the tense before they got it, and a first goal
+     has one job: say what to do and why, at a glance. Naming the number
+     does the same work faster, because the whole game is in the gap between
+     what you arrived with and what a room costs. */
   { id: 'arrive',  label: 'Sleeping on the couch',
-    goal: 'Do one delivery. Every dollar is rent you have not paid yet.',
+    goal: `Do one delivery. Rent is ${money(RENT)} and nothing is paying it yet.`,
     reached: s => s.runs >= 1 },
   { id: 'working', label: 'Delivering',
     goal: 'Get a resume together. Deliveries will not pass a rental screening.',
