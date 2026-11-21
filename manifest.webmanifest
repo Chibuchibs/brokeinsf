@@ -1,0 +1,17 @@
+{
+  "name": "Broke in SF",
+  "short_name": "Broke in SF",
+  "description": "A game about arriving in San Francisco broke. Sleep on a friend's couch, do deliveries, find work, and try to make rent before the thirty days are up.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#e1ddcd",
+  "theme_color": "#2b2b31",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

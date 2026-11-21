@@ -1,0 +1,2247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#2b2b31">
+<title>Broke in SF — the game</title>
+
+<!-- ---- what a pasted link looks like ----
+     There was nothing here at all, which meant the URL rendered in WhatsApp,
+     iMessage, Reddit and Slack as a bare grey line of text. For a game whose
+     only distribution channel is somebody posting a link, that one omission
+     was costing more than anything in the game itself. The image is
+     1200x630 because that is what every one of those services crops to. -->
+<meta name="description" content="A game about making rent and surviving in San Francisco. Thirty days on a friend's couch, delivery work, and a job to find before the time runs out.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Broke in SF">
+<meta property="og:title" content="Broke in SF — the game">
+<meta property="og:description" content="A game about making rent and surviving in San Francisco. You arrive with $2,000 and a friend's couch for thirty days.">
+<meta property="og:url" content="https://chibuchibs.github.io/brokeinsf/">
+<meta property="og:image" content="https://chibuchibs.github.io/brokeinsf/share.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A top-down map of the San Francisco Tenderloin, with Market Street running across it.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Broke in SF — the game">
+<meta name="twitter:description" content="A game about making rent and surviving in San Francisco. You arrive with $2,000 and thirty days on a couch.">
+<meta name="twitter:image" content="https://chibuchibs.github.io/brokeinsf/share.png">
+
+<!-- ---- installing it ---- -->
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Broke in SF">
+<style>
+  :root{
+    --ink:#20202a; --muted:#6a6a78; --line:#d9d6ce;
+    --paper:#f4f1ea; --card:#fffdf8;
+    --road:#b9b6ae; --road-big:#a9a69d; --walk:#e4e1d8;
+    --block:#ddd8cc; --block2:#d4cec0;
+    --go:#1f6f5c; --warn:#a8451f; --gold:#b8832a;
+    --sheet:#fffdf8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--paper);
+    font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink)}
+  #map{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+  /* ---------- top bar ---------- */
+  #top{position:fixed;top:0;left:0;right:0;padding:env(safe-area-inset-top) 12px 0;
+    display:flex;gap:8px;align-items:flex-start;pointer-events:none;z-index:5}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:11px;
+    padding:7px 11px;box-shadow:0 2px 10px rgba(0,0,0,.09);margin-top:10px}
+  .chip b{font-variant-numeric:tabular-nums}
+  #cash{font-weight:700}
+  #energy{flex:1;min-width:70px}
+  #ebar{height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:5px}
+  #efill{height:100%;background:var(--go);width:82%;transition:width .3s}
+  .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  /* A stopped clock with no explanation just looks broken, so say it is held. */
+  #clockchip .lbl::after{content:'';}
+  #clockchip.held{background:#efece3;border-color:#c8c3b6}
+  #clockchip.held .lbl::after{content:' · held';color:var(--gold)}
+  #clockchip.held b{opacity:.55}
+
+  /* ---------- goal strip ---------- */
+  #goal{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 62px);
+    background:var(--card);border:1px solid var(--line);border-radius:11px;
+    padding:8px 11px;box-shadow:0 2px 10px rgba(0,0,0,.09);z-index:5}
+  #goal{cursor:pointer}
+  #goal:active{background:#f3f0e8}
+  #goal .now{font-weight:650}
+  #goal .next{color:var(--muted);font-size:13px;padding-right:14px;
+    background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' \
+width='8' height='12' viewBox='0 0 8 12'><path d='M1.5 1.5 6 6l-4.5 4.5' \
+fill='none' stroke='%236a6a78' stroke-width='1.8' stroke-linecap='round' \
+stroke-linejoin='round'/></svg>") right center no-repeat}
+
+  /* ---------- message ---------- */
+  #msg{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 86px);
+    z-index:6;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+  .line{background:#2b2b31;color:#f6f4ee;border-radius:10px;padding:9px 12px;
+    font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,.2);animation:rise .22s ease-out}
+  .line.bad{background:#7b3317}
+  .line.good{background:#1f6f5c}
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+
+  /* ---------- bottom bar ---------- */
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:7;
+    padding:10px 12px calc(env(safe-area-inset-bottom) + 12px);
+    display:flex;gap:8px;background:linear-gradient(transparent,rgba(244,241,234,.95) 38%)}
+  button{font:inherit;border-radius:11px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);padding:12px 14px;font-weight:600;
+    cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.09)}
+  button:active{transform:translateY(1px)}
+  button.p{background:var(--go);color:#fff;border-color:transparent;flex:1}
+  button.q{background:var(--gold);color:#fff;border-color:transparent;flex:1}
+  button[disabled]{opacity:.45}
+
+  /* ---------- sheet ---------- */
+  /* Only on screen while the map has been dragged off the player. */
+  #back{position:fixed;right:12px;z-index:6;display:none;
+    bottom:calc(env(safe-area-inset-bottom) + 150px);font-size:13px;padding:10px 13px}
+
+  #veil{position:fixed;inset:0;background:rgba(20,20,26,.42);z-index:8;display:none}
+  #sheet{position:fixed;left:0;right:0;bottom:0;z-index:9;display:none;
+    background:var(--sheet);border-radius:18px 18px 0 0;
+    padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);
+    max-height:82vh;overflow:auto;box-shadow:0 -8px 40px rgba(0,0,0,.26)}
+  #sheet h2{margin:2px 0 3px;font-size:19px}
+  #sheet .sub{color:var(--muted);font-size:13px;margin-bottom:13px}
+  .row{display:flex;gap:10px;align-items:center;justify-content:space-between;
+    border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:9px;
+    background:var(--card)}
+  .row .l{font-weight:650}
+  .row .d{color:var(--muted);font-size:13px}
+  .pay{font-weight:700;color:var(--go);white-space:nowrap}
+  .tags{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0 13px}
+  .tag{border:1px solid var(--line);border-radius:999px;padding:7px 12px;
+    background:var(--card);font-size:13px;cursor:pointer;user-select:none}
+  .tag.on{background:var(--go);color:#fff;border-color:transparent}
+  textarea,input[type=text]{width:100%;font:inherit;padding:10px 11px;border-radius:11px;
+    border:1px solid var(--line);background:var(--card);color:var(--ink)}
+  textarea{min-height:92px;resize:vertical}
+  .note{font-size:12px;color:var(--muted);margin-top:8px}
+  .hosts{display:flex;gap:12px;margin:6px 0 4px}
+  .host{flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;
+    padding:16px 10px;font-size:15px}
+  .host svg{display:block}
+  .key{display:flex;flex-wrap:wrap;gap:8px 16px;margin:10px 0 2px}
+  .key span{display:flex;align-items:center;gap:7px;font-size:13px}
+  .key i{width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 2px #fffdf8}
+  .stack{display:flex;gap:8px;margin-top:4px}
+  .stack button{flex:1}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+
+<div id="top">
+  <div class="chip"><div class="lbl">Cash</div><b id="cash">$180</b></div>
+  <div class="chip"><div class="lbl">Day</div><b id="day">1</b></div>
+  <div class="chip" id="clockchip"><div class="lbl">Time</div><b id="time">07:00</b></div>
+  <div class="chip" id="energy"><div class="lbl">Energy</div>
+    <div id="ebar"><div id="efill"></div></div></div>
+</div>
+
+<div id="goal">
+  <div class="now" id="rung">Sleeping on the couch</div>
+  <div class="next" id="rgoal">Make your first $100</div>
+</div>
+
+<div id="msg"></div>
+
+<button id="back">Back to me</button>
+
+<div id="bar">
+  <button class="p" id="act">Find work</button>
+  <!-- "Resume" sat here and read as "resume the game" rather than "my CV".
+       "You" cannot be misread as a verb, and the panel behind it now carries
+       the whole of your situation, not just the resume. -->
+  <button id="me">You</button>
+</div>
+
+<div id="veil"></div>
+<div id="sheet"></div>
+
+<script type="module">
+import { WORLD, STREETS, PLACES } from './city.js?v=20261121141823';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121141823';
+import { drawVehicle, BAG } from './traffic.js?v=20261121141823';
+import * as G from './game.js?v=20261121141823';
+import * as SND from './sound.js?v=20261121141823';
+
+/* ====================================================================
+   THE WALK GRAPH
+   Streets arrive as polylines. To walk them we need a graph: every place
+   two streets cross becomes a node, every stretch between nodes becomes an
+   edge, and long edges get chopped up so the player can stop mid-block and
+   so a tap anywhere on a street finds something near it.
+   ==================================================================== */
+const key = (x, y) => Math.round(x) + ',' + Math.round(y);
+const nodes = new Map();          // key -> {x,y,to:Set<key>}
+function node(x, y) {
+  const k = key(x, y);
+  if (!nodes.has(k)) nodes.set(k, { x, y, to: new Set(), k });
+  return nodes.get(k);
+}
+function link(a, b) {
+  if (a.k === b.k) return;
+  a.to.add(b.k); b.to.add(a.k);
+}
+
+/* Where do two line segments cross? Returns the point, or null. */
+function cross(p1, p2, p3, p4) {
+  const d = (p2[0]-p1[0])*(p4[1]-p3[1]) - (p2[1]-p1[1])*(p4[0]-p3[0]);
+  if (Math.abs(d) < 1e-9) return null;
+  const t = ((p3[0]-p1[0])*(p4[1]-p3[1]) - (p3[1]-p1[1])*(p4[0]-p3[0])) / d;
+  const u = ((p3[0]-p1[0])*(p2[1]-p1[1]) - (p3[1]-p1[1])*(p2[0]-p1[0])) / d;
+  if (t < -0.001 || t > 1.001 || u < -0.001 || u > 1.001) return null;
+  return [p1[0] + t*(p2[0]-p1[0]), p1[1] + t*(p2[1]-p1[1])];
+}
+
+/* Flatten every street into segments, tagged with which street they came from
+   so a street never "crosses" itself. */
+const segs = [];
+STREETS.forEach((st, si) => {
+  for (let i = 0; i < st.pts.length - 1; i++)
+    segs.push({ si, a: st.pts[i], b: st.pts[i+1], cuts: [] });
+});
+for (let i = 0; i < segs.length; i++)
+  for (let j = i + 1; j < segs.length; j++) {
+    if (segs[i].si === segs[j].si) continue;
+    const p = cross(segs[i].a, segs[i].b, segs[j].a, segs[j].b);
+    if (p) { segs[i].cuts.push(p); segs[j].cuts.push(p); }
+  }
+
+/* How wide is the road under any given edge? Needed so people can stand on
+   the pavement and cars can sit in a lane, instead of everything sharing one
+   centre line. Keyed by the node pair, recorded while the graph is built —
+   it is the only point where we still know which street a stretch came from. */
+const ROADW = { arterial: 30, street: 19, crooked: 15 };
+const edgeHalf = new Map();
+const ekey = (a, b) => a.k < b.k ? a.k + '|' + b.k : b.k + '|' + a.k;
+function halfOf(aK, bK) {
+  return (aK && bK && edgeHalf.get(aK < bK ? aK + '|' + bK : bK + '|' + aK)) || 9.5;
+}
+
+const STEP = 38;                  // walkable node every ~38px
+for (const s of segs) {
+  const [ax, ay] = s.a, [bx, by] = s.b;
+  const len = Math.hypot(bx-ax, by-ay) || 1;
+  const along = p => ((p[0]-ax)*(bx-ax) + (p[1]-ay)*(by-ay)) / (len*len);
+  const ts = new Set([0, 1]);
+  s.cuts.forEach(p => ts.add(Math.max(0, Math.min(1, along(p)))));
+  for (let d = STEP; d < len; d += STEP) ts.add(d / len);
+  const sorted = [...ts].sort((p, q) => p - q);
+  const half = (ROADW[STREETS[s.si].kind] || 19) / 2;
+  let prev = null;
+  for (const t of sorted) {
+    const n = node(ax + (bx-ax)*t, ay + (by-ay)*t);
+    if (prev) {
+      link(prev, n);
+      /* Widest wins where two streets share a stretch. */
+      const k = ekey(prev, n);
+      edgeHalf.set(k, Math.max(edgeHalf.get(k) || 0, half));
+    }
+    prev = n;
+  }
+}
+const NODES = [...nodes.values()];
+
+function nearestNode(x, y) {
+  let best = null, bd = Infinity;
+  for (const n of NODES) {
+    const d = (n.x-x)**2 + (n.y-y)**2;
+    if (d < bd) { bd = d; best = n; }
+  }
+  return { node: best, dist: Math.sqrt(bd) };
+}
+
+/* Dijkstra, small graph, runs in well under a frame. */
+function route(fromK, toK) {
+  /* Never trust the endpoints. A node id that is not in this build's graph
+     used to throw inside the loop below, which killed the click handler and
+     left the player unable to move at all, with nothing on screen to say why. */
+  if (!nodes.has(fromK) || !nodes.has(toK)) return null;
+  if (fromK === toK) return [];
+  const dist = new Map([[fromK, 0]]), prev = new Map(), seen = new Set();
+  while (true) {
+    let u = null, ud = Infinity;
+    for (const [k, d] of dist) if (!seen.has(k) && d < ud) { ud = d; u = k; }
+    if (u === null) return null;
+    if (u === toK) break;
+    seen.add(u);
+    const nu = nodes.get(u);
+    for (const vk of nu.to) {
+      if (seen.has(vk)) continue;
+      const nv = nodes.get(vk);
+      const nd = ud + Math.hypot(nv.x-nu.x, nv.y-nu.y);
+      if (nd < (dist.get(vk) ?? Infinity)) { dist.set(vk, nd); prev.set(vk, u); }
+    }
+  }
+  const path = [];
+  for (let k = toK; k !== fromK; k = prev.get(k)) path.unshift(nodes.get(k));
+  return path;
+}
+
+/* Each place hangs off the walk graph at its nearest node — that node IS the
+   door. You arrive by standing on the street outside, which is the whole
+   point: nothing here takes you off the street. */
+for (const p of PLACES) p.door = nearestNode(p.at[0], p.at[1]).node;
+
+/* ====================================================================
+   THE BLOCKS — the buildings, the parks, and the trees in front of them.
+
+   The old generator scattered rectangles into the middle of the map and kept
+   every one of them nineteen pixels clear of every street. That is the city
+   inside out. San Francisco is built wall to wall, right up to the sidewalk,
+   and the open ground is BEHIND the buildings in the middle of the block.
+   From above, that one difference is most of the look: a continuous street
+   wall with gaps you could count, rather than boxes floating in cream.
+
+   So this walks the streets instead of the map. Down one side of every
+   segment and back the other, laying lots shoulder to shoulder against the
+   pavement and skipping anything that would land on a crossing street. What
+   is left over — the middle of each block — is back yards, and gets trees.
+
+   All of it is seeded, so the city is the same city every time you load it,
+   and all of it is baked into one bitmap, so none of it costs a frame.
+   ==================================================================== */
+let seed = 20261103;
+const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const span = ([lo, hi]) => lo + rnd() * (hi - lo);
+
+/* Which streets are anywhere near a given point. Laying out the blocks asks
+   that question about a hundred times per candidate lot and there are a few
+   thousand candidates, so asking it of all thirty-nine segments each time
+   cost 230ms of frozen screen before the city appeared — a second or so on
+   the cheap Android this has to run on. Bucketed into 64px cells it is a
+   handful of segments per question. Built once, used only at load. */
+const CELL = 64, GW = Math.ceil(WORLD.w / CELL), GH = Math.ceil(WORLD.h / CELL);
+const segGrid = Array.from({ length: GW * GH }, () => []);
+for (const o of segs) {
+  const pad = (ROADW[STREETS[o.si].kind] || 19) / 2 + 24;
+  const gx0 = Math.max(0, Math.floor((Math.min(o.a[0], o.b[0]) - pad) / CELL));
+  const gx1 = Math.min(GW - 1, Math.floor((Math.max(o.a[0], o.b[0]) + pad) / CELL));
+  const gy0 = Math.max(0, Math.floor((Math.min(o.a[1], o.b[1]) - pad) / CELL));
+  const gy1 = Math.min(GH - 1, Math.floor((Math.max(o.a[1], o.b[1]) + pad) / CELL));
+  for (let gx = gx0; gx <= gx1; gx++)
+    for (let gy = gy0; gy <= gy1; gy++) segGrid[gy * GW + gx].push(o);
+}
+function segsAt(x, y) {
+  const gx = Math.floor(x / CELL), gy = Math.floor(y / CELL);
+  if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) return segs;
+  return segGrid[gy * GW + gx];
+}
+
+function nearStreet(x, y, pad) {
+  for (const s of segsAt(x, y)) {
+    const [ax, ay] = s.a, [bx, by] = s.b;
+    const dx = bx-ax, dy = by-ay, L = dx*dx + dy*dy || 1;
+    let t = ((x-ax)*dx + (y-ay)*dy) / L; t = Math.max(0, Math.min(1, t));
+    if (Math.hypot(x - (ax+dx*t), y - (ay+dy*t)) < pad) return true;
+  }
+  return false;
+}
+
+/* Open ground. Hand-placed, because the two that matter are real: the park
+   at Eddy and Jones, and the plaza in front of City Hall. Nothing is built
+   on them and the trees go in thick. */
+const PARKS = [
+  { x: 714, y: 818, w: 78, h: 54, trees: 11 },     // Boeddeker Park
+  { x: 96,  y: 986, w: 92,  h: 98, trees: 13 },    // Civic Center plaza
+];
+/* Ground kept for the landmarks. A pin on its own makes Coit Tower look like
+   a laundromat — the point of a landmark is that you can see it from the
+   next block without reading a label, so each one owns a plot that the
+   block generator builds around and the bake draws by hand. */
+const PLOTS = [
+  { kind: 'coit',    x: 912, y: 134, w: 68, h: 50 },
+  { kind: 'pyramid', x: 916, y: 316, w: 52, h: 48 },
+  { kind: 'ferry',   x: 914, y: 769, w: 58, h: 42 },
+  { kind: 'square',  x: 914, y: 568, w: 58, h: 60 },
+  { kind: 'lookout', x: 310, y: 60,  w: 64, h: 46 },
+];
+const hit = (k, x, y, pad) =>
+  x > k.x - pad && x < k.x + k.w + pad && y > k.y - pad && y < k.y + k.h + pad;
+const inPark = (x, y, pad = 0) => PARKS.some(k => hit(k, x, y, pad));
+const reserved = (x, y, pad = 0) =>
+  inPark(x, y, pad) || PLOTS.some(k => hit(k, x, y, pad));
+
+/* Lot sizes by where you are standing. South of Market is deep and wide —
+   warehouses, the Depot, loading bays. The Tenderloin is narrow frontage and
+   deep buildings packed tight, which is exactly why it looks the way it does
+   from above. North of Geary the grain loosens and gaps open up. */
+function lotShape(y) {
+  /* `ht` is how far the facade rises off the pavement. South of Market is
+     one and two storey warehouses; the Tenderloin is the tallest grain in
+     the game, three to six storeys of apartment block shoulder to shoulder;
+     north of Geary sits between the two. */
+  if (y > 1045) return { fw: [28, 54], dp: [30, 56], gap: [0, 2.5], ht: [4, 8] };
+  if (y > 600)  return { fw: [16, 30], dp: [20, 40], gap: [0, 1.4], ht: [8, 15] };
+  return { fw: [19, 36], dp: [20, 42], gap: [0.5, 4], ht: [6, 12] };
+}
+
+/* Would this footprint sit on top of a road? Checked per street, against
+   that street's own half-width, because one shared padding cannot be right
+   for a six-lane arterial and a back street at the same time — and a single
+   number large enough for Van Ness rejected every building on every ordinary
+   block, including the ones correctly set back from their own kerb. */
+function roadGap(p, own) {
+  let worst = 1e9;
+  for (const o of segsAt(p[0], p[1])) {
+    if (o === own) continue;
+    const pad = (ROADW[STREETS[o.si].kind] || 19) / 2 + 4.5;
+    const [ax, ay] = o.a, [bx, by] = o.b;
+    const dx = bx-ax, dy = by-ay, L = dx*dx + dy*dy || 1;
+    let t = ((p[0]-ax)*dx + (p[1]-ay)*dy) / L; t = Math.max(0, Math.min(1, t));
+    worst = Math.min(worst, Math.hypot(p[0]-(ax+dx*t), p[1]-(ay+dy*t)) - pad);
+  }
+  return worst;
+}
+function onRoad(own, pts) {
+  return pts.some(p => roadGap(p, own) < 0);
+}
+/* Sample the whole footprint, not its four corners. A fifty-pixel lot on
+   Market can sit with a corner either side of a cross street and nothing
+   between them to notice the road running through the middle of it. */
+function footprint(cx0, cy0, w, d, rot) {
+  const ca = Math.cos(rot), sa = Math.sin(rot), out = [];
+  const nu = Math.max(2, Math.ceil(w / 5)), nv = Math.max(2, Math.ceil(d / 5));
+  for (let i = 0; i <= nu; i++)
+    for (let j = 0; j <= nv; j++) {
+      const lx = (i / nu - .5) * w, ly = (j / nv - .5) * d;
+      out.push([cx0 + lx*ca - ly*sa, cy0 + lx*sa + ly*ca]);
+    }
+  return out;
+}
+/* How deep the block actually is behind this bit of kerb. Lot depths were
+   picked from a range and then thrown away when they collided with the row
+   on the far side — on an eighty-pixel Tenderloin block that is most of
+   them, which is why the frontage came out half built. Measuring the room
+   first and cutting the lot to fit builds the whole street instead. */
+function roomBehind(x, y, dx, dy, own, max) {
+  for (let r = 6; r <= max; r += 2.5)
+    if (roadGap([x + dx*r, y + dy*r], own) < 0) return r - 2.5;
+  return max;
+}
+
+function onBuilding(o, x, y, pad) {
+  const ca = Math.cos(-o.rot), sa = Math.sin(-o.rot);
+  const dx = x - o.x, dy = y - o.y;
+  return Math.abs(dx*ca - dy*sa) < o.w/2 + pad &&
+         Math.abs(dx*sa + dy*ca) < o.d/2 + pad;
+}
+
+const BUILDINGS = [], TREES = [];
+
+for (const sg of segs) {
+  const st = STREETS[sg.si];
+  /* The crooked block is hillside and planting, not frontage. */
+  if (st.kind === 'crooked') continue;
+  const [ax, ay] = sg.a, [bx, by] = sg.b;
+  const L = Math.hypot(bx - ax, by - ay);
+  if (L < 26) continue;
+  const ang = Math.atan2(by - ay, bx - ax);
+  const ux = (bx - ax) / L, uy = (by - ay) / L;
+  const nx = -uy, ny = ux;
+  const half = (ROADW[st.kind] || 19) / 2;
+  const kerb = half + 5.5;                       // road edge plus the pavement
+
+  for (const side of [1, -1]) {
+    let t = 3 + rnd() * 12;
+    while (t < L - 12) {
+      const sh = lotShape(ay + (by - ay) * (t / L));
+      const fw = span(sh.fw);
+      const mid = t + fw / 2;
+      const fx = ax + ux * mid + nx * side * kerb;      // the lot's frontage
+      const fy = ay + uy * mid + ny * side * kerb;
+      t += fw + span(sh.gap);
+      /* Half the room behind, so the row on the far side of the block gets
+         the other half and the middle stays as back yards. */
+      const room = roomBehind(fx, fy, nx * side, ny * side, sg, 58);
+      const dp = Math.min(span(sh.dp), room / 2 - 1.5);
+      if (dp < 13) continue;
+      const cx0 = fx + nx * side * dp / 2, cy0 = fy + ny * side * dp / 2;
+      if (cx0 < 26 || cy0 < 26 || cx0 > WORLD.w - 26 || cy0 > WORLD.h - 26) continue;
+      if (reserved(cx0, cy0, 8)) continue;
+      /* Rotating so local -y always faces the street, whichever side we are
+         laying, keeps the bay windows and the parapet on the front. */
+      const rot = ang + (side > 0 ? 0 : Math.PI);
+      const foot = footprint(cx0, cy0, fw + 2, dp + 2, rot);
+      if (onRoad(sg, foot)) continue;
+      if (foot.some(q => reserved(q[0], q[1], 2))) continue;
+      const r = Math.min(fw, dp) * 0.34;
+      if (BUILDINGS.some(o => Math.hypot(o.x - cx0, o.y - cy0) < r + o.r)) continue;
+      /* The facade is carved OUT of the footprint rather than added to it:
+         the ground the building covers does not change, so nothing newly
+         overlaps a neighbour and no wall can lean out over a road. Capped
+         against the depth so there is always a roof left to see. */
+      const ht = Math.min(span(sh.ht), dp * 0.42);
+      BUILDINGS.push({ x: cx0, y: cy0, w: fw, d: dp, rot, r, ht,
+                       tone: rnd(), tint: rnd(), bays: rnd() < 0.5,
+                       roof: rnd() < 0.42 });
+    }
+  }
+
+  /* Street trees, down the kerb between the road and the buildings. Spacing
+     is uneven on purpose — a perfectly regular row reads as a fence. */
+  for (const side of [1, -1]) {
+    let t = 10 + rnd() * 26;
+    while (t < L - 10) {
+      /* On the pavement band itself — the stroke runs from the kerb out to
+         half + 2.75 — not out at half + 3.8 where the building faces start. */
+      const x = ax + ux * t + nx * side * (half + 2.3);
+      const y = ay + uy * t + ny * side * (half + 2.3);
+      t += 30 + rnd() * 32;
+      if (x < 12 || y < 12 || x > WORLD.w - 12 || y > WORLD.h - 12) continue;
+      if (onRoad(sg, [[x, y]])) continue;      // not in a crossing's mouth
+      if (reserved(x, y, 2)) continue;
+      if (PLACES.some(q => Math.hypot(q.at[0] - x, q.at[1] - y) < 17)) continue;
+      if (BUILDINGS.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 3)) continue;
+      TREES.push({ x, y, r: 3 + rnd() * 1.9, tone: rnd() });
+    }
+  }
+}
+
+/* Back yards. Whatever is left in the middle of a block once the frontage is
+   built — which in this city is lightwells, a fig tree and somebody's deck. */
+for (let i = 0; i < 1400 && TREES.length < 430; i++) {
+  const x = 40 + rnd() * (WORLD.w - 80), y = 40 + rnd() * (WORLD.h - 80);
+  if (nearStreet(x, y, 17)) continue;
+  if (reserved(x, y, 4)) continue;
+  if (BUILDINGS.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 4.5)) continue;
+  if (TREES.some(o => Math.hypot(o.x - x, o.y - y) < 15)) continue;
+  TREES.push({ x, y, r: 3.6 + rnd() * 2.6, tone: rnd() });
+}
+
+/* The switchbacks. The thing people queue up that block to photograph is
+   the planting in the notches between the turns, and the generic yard pass
+   cannot reach them — it keeps seventeen pixels clear of every street and
+   the notches are twenty-five wide. */
+for (const st of STREETS) {
+  if (st.kind !== 'crooked') continue;
+  for (let i = 0; i < st.pts.length - 1; i++) {
+    const a = st.pts[i], b = st.pts[i + 1];
+    for (let n = 0; n < 2; n++) {
+      const x = (a[0] + b[0]) / 2 + (rnd() - .5) * 9;
+      const y = (a[1] + b[1]) / 2 + (rnd() - .5) * 9;
+      if (nearStreet(x, y, 8.5)) continue;
+      TREES.push({ x, y, r: 2.2 + rnd() * 1.6, tone: rnd() * .4 });
+    }
+  }
+}
+
+/* Street trees are planted street by street, alongside the buildings on that
+   street — so a building laid down later, on the next street over, can land
+   on one already in the ground. Nothing stops that at planting time and the
+   trees are painted last, which put a plane tree on a roof. Swept here. */
+for (let i = TREES.length - 1; i >= 0; i--) {
+  const t = TREES[i];
+  if (BUILDINGS.some(o => Math.abs(o.x - t.x) < o.w/2 + o.d/2 + t.r &&
+                          Math.abs(o.y - t.y) < o.w/2 + o.d/2 + t.r &&
+                          onBuilding(o, t.x, t.y, -0.6))) TREES.splice(i, 1);
+}
+
+/* The two hills are wooded — Telegraph Hill most famously so. Planted round
+   the rim rather than over the middle, so the tower still reads. */
+for (const k of PLOTS) {
+  if (k.kind !== 'coit' && k.kind !== 'lookout') continue;
+  const cx0 = k.x + k.w / 2, cy0 = k.y + k.h / 2;
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rnd() * 0.5;
+    const rr = 0.66 + rnd() * 0.26;
+    TREES.push({ x: cx0 + Math.cos(a) * k.w / 2 * rr,
+                 y: cy0 + Math.sin(a) * k.h / 2 * rr,
+                 r: 3 + rnd() * 2, tone: rnd() * .45 });
+  }
+}
+
+/* And the parks themselves, planted properly. */
+for (const k of PARKS)
+  for (let i = 0; i < k.trees; i++)
+    TREES.push({ x: k.x + 6 + rnd() * (k.w - 12),
+                 y: k.y + 6 + rnd() * (k.h - 12),
+                 r: 4 + rnd() * 2.6, tone: rnd() });
+
+/* ====================================================================
+   THE STREET'S OWN PEOPLE
+
+   Everybody else out walking. They are scenery and nothing else: no
+   collision, no cost, nothing to dodge and nothing to tap. You cannot walk
+   into them and they cannot do anything to you. That is deliberate — the
+   hazards in this game are Waymos, scooters, fog and rent, and the people on
+   the sidewalk are just people on the sidewalk, the same as you are.
+   ==================================================================== */
+const PEDS = [];
+/* Scaled with the city. Nob Hill, Franklin and Mission roughly doubled the
+   street length, and fifty-two people spread over all of it left the new
+   half looking evacuated. Both draw loops cull off-screen, so the only cost
+   of more of them is stepping a position. */
+for (let i = 0; i < 84; i++) {
+  const n = NODES[Math.floor(Math.random() * NODES.length)];
+  PEDS.push({
+    x: n.x, y: n.y, at: n.k, to: null,
+    heading: Math.random() * Math.PI * 2,
+    phase: Math.random() * Math.PI * 2,
+    /* Walking pace, and it has to stay clear of driving pace. At 30-58 the
+       quickest pedestrian outran the slowest bus, so people and traffic read
+       as the same thing moving at the same speed. The ranges must not
+       overlap: the slowest vehicle on the road is 38. */
+    speed: 15 + Math.random() * 14,
+    /* Which pavement they are on. Fixed per person, so nobody teleports
+       across the road at a corner, and both sides of every street are used. */
+    side: Math.random() < 0.5 ? 1 : -1,
+    look: LOOKS[i % LOOKS.length],
+  });
+}
+
+/* Pick the next corner. Weighted towards carrying straight on, because a
+   pure random choice at every node makes everyone jitter back and forth over
+   the same ten feet like a faulty sprinkler. */
+function pedNext(p) {
+  const here = nodes.get(p.at);
+  if (!here) { p.to = null; return; }
+  let best = null, bestScore = -9;
+  for (const k of here.to) {
+    const n = nodes.get(k);
+    if (!n) continue;
+    const L = Math.hypot(n.x - here.x, n.y - here.y) || 1;
+    const dot = ((n.x - here.x) / L) * Math.cos(p.heading)
+              + ((n.y - here.y) / L) * Math.sin(p.heading);
+    const score = dot * 1.6 + Math.random();
+    if (score > bestScore) { bestScore = score; best = n; }
+  }
+  p.to = best;
+}
+
+function stepPeds(dt) {
+  for (const p of PEDS) {
+    if (!p.to) { pedNext(p); if (!p.to) continue; }
+    let move = p.speed * dt;
+    let guard = 0;
+    while (move > 0 && p.to && guard++ < 4) {
+      const dx = p.to.x - p.x, dy = p.to.y - p.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.01) {
+        const want = Math.atan2(dy, dx);
+        let turn = want - p.heading;
+        while (turn > Math.PI) turn -= Math.PI * 2;
+        while (turn < -Math.PI) turn += Math.PI * 2;
+        p.heading += turn * Math.min(1, dt * 9);
+      }
+      if (d <= move) {
+        p.x = p.to.x; p.y = p.to.y; p.at = p.to.k;
+        move -= d; p.phase = stepPhase(p.phase, d);
+        pedNext(p);
+      } else {
+        p.x += dx / d * move; p.y += dy / d * move;
+        p.phase = stepPhase(p.phase, move);
+        move = 0;
+      }
+    }
+  }
+}
+
+/* ====================================================================
+   TRAFFIC
+
+   Same wander as the pedestrians, with two differences. They hold a lane on
+   the right-hand side of the street, so opposing flows separate instead of
+   everything sliding along one centre line. And a Waymo will, now and then,
+   simply stop — which is not a bug, it is the single most San Franciscan
+   thing on this map and the setback text already promises it.
+   ==================================================================== */
+const CARS = [];
+for (let i = 0; i < 42; i++) {
+  const n = NODES[Math.floor(Math.random() * NODES.length)];
+  const kind = BAG[Math.floor(Math.random() * BAG.length)];
+  CARS.push({
+    x: n.x, y: n.y, at: n.k, to: null,
+    heading: Math.random() * Math.PI * 2,
+    kind,
+    speed: kind.speed[0] + Math.random() * (kind.speed[1] - kind.speed[0]),
+    frozen: 0,
+  });
+}
+
+function carNext(c) {
+  const here = nodes.get(c.at);
+  if (!here) { c.to = null; return; }
+  let best = null, bestScore = -9;
+  for (const k of here.to) {
+    const n = nodes.get(k);
+    if (!n) continue;
+    const L = Math.hypot(n.x - here.x, n.y - here.y) || 1;
+    const dot = ((n.x - here.x) / L) * Math.cos(c.heading)
+              + ((n.y - here.y) / L) * Math.sin(c.heading);
+    /* Much stronger straight-ahead bias than a person gets: traffic runs the
+       length of a street, it does not browse. */
+    const score = dot * 4 + Math.random() * 0.7;
+    if (score > bestScore) { bestScore = score; best = n; }
+  }
+  c.to = best;
+}
+
+function stepCars(dt) {
+  for (const c of CARS) {
+    if (c.frozen > 0) { c.frozen -= dt; continue; }
+    /* It has come to a stop in the middle of the junction. Nobody to honk at. */
+    if (c.kind.lidar && Math.random() < dt * 0.016) { c.frozen = 2 + Math.random() * 4; continue; }
+
+    if (!c.to) { carNext(c); if (!c.to) continue; }
+    let move = c.speed * dt, guard = 0;
+    while (move > 0 && c.to && guard++ < 4) {
+      const dx = c.to.x - c.x, dy = c.to.y - c.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.01) {
+        const want = Math.atan2(dy, dx);
+        let turn = want - c.heading;
+        while (turn > Math.PI) turn -= Math.PI * 2;
+        while (turn < -Math.PI) turn += Math.PI * 2;
+        c.heading += turn * Math.min(1, dt * 7);
+      }
+      if (d <= move) { c.x = c.to.x; c.y = c.to.y; c.at = c.to.k; move -= d; carNext(c); }
+      else { c.x += dx / d * move; c.y += dy / d * move; move = 0; }
+    }
+  }
+}
+
+/* ====================================================================
+   STATE
+   ==================================================================== */
+/* Bumped whenever the save shape changes. A save from an older shape is
+   dropped rather than patched: the fields it is missing (s.time, say) read as
+   NaN and poison the clock, and there is no player on earth whose run is worth
+   more than a clean start right now. */
+/* Web Audio will not start without a gesture, and the first gesture a
+   player makes is not on the map — it is the button on the "Whose couch?"
+   card. Hanging the unlock off the canvas meant the entire opening, host
+   card and arrival card and all, played in silence until they happened to
+   tap a street. Any pointer down anywhere will do. */
+addEventListener('pointerdown', () => SND.unlock(), { once: false, capture: true });
+
+/* Register the service worker, which is what makes the game installable and
+   what makes it open with no signal. Deliberately not awaited and
+   deliberately swallowed: it is an enhancement, and a browser that refuses
+   it (or a file:// open, where it is not allowed at all) should still get a
+   working game rather than a console full of red. */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
+  addEventListener('load', () =>
+    navigator.serviceWorker.register('./sw.js').catch(() => {}));
+
+const SAVE = 'sfgame:save', SHAPE = 2;
+let s = null;
+try {
+  const raw = localStorage.getItem(SAVE);
+  if (raw) { const o = JSON.parse(raw); if (o && o.shape === SHAPE) s = o; }
+} catch {}
+if (!s) s = G.newGame();
+s.shape = SHAPE;
+const persist = () => {
+  s.me = { x: me.x, y: me.y, at: me.at };   // reload should not teleport you home
+  try { localStorage.setItem(SAVE, JSON.stringify(s)); } catch {}
+};
+
+const couch = PLACES.find(p => p.id === 'couch');
+const me = { x: couch.door.x, y: couch.door.y, at: couch.door.k, path: [], t: 0,
+             heading: 0, phase: 0, walking: false };
+/* Restore where they were standing — but never trust the saved node id. If it
+   is missing or names a node this build's graph does not have (the street
+   layout changed under an old save), every route lookup fails and the player
+   is frozen in place with no error. Snap to the nearest real node instead. */
+if (s.me && Number.isFinite(s.me.x) && Number.isFinite(s.me.y)) {
+  me.x = s.me.x; me.y = s.me.y;
+  me.at = nodes.has(s.me.at) ? s.me.at : nearestNode(me.x, me.y).node.k;
+}
+
+/* ====================================================================
+   RENDER
+   ==================================================================== */
+const cv = document.getElementById('map'), cx = cv.getContext('2d');
+let VW = 0, VH = 0, DPR = 1, SCALE = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  VW = cv.clientWidth; VH = cv.clientHeight;
+  cv.width = VW * DPR; cv.height = VH * DPR;
+  /* Show roughly 440 world px across the short side — about four blocks, close
+     enough to read shop names, wide enough to see the next corner. */
+  SCALE = Math.max(VW, VH * 0.62) / 520;
+  SCALE = Math.max(0.62, Math.min(1.5, SCALE));
+}
+addEventListener('resize', resize); resize();
+
+/* `free` means the player has dragged the map somewhere and the camera is no
+   longer chasing them. It re-attaches the moment they tap a street to walk. */
+const cam = { x: me.x, y: me.y, free: false };
+function clampCam() {
+  const hw = VW / (2 * SCALE), hh = VH / (2 * SCALE);
+  /* A little overscroll past the edge, but not into open grey nothing. */
+  cam.x = Math.max(Math.min(hw, 60), Math.min(WORLD.w - Math.min(hw, 60), cam.x));
+  cam.y = Math.max(Math.min(hh, 60), Math.min(WORLD.h - Math.min(hh, 60), cam.y));
+}
+const W = (x) => (x - cam.x) * SCALE + VW/2;
+const H = (y) => (y - cam.y) * SCALE + VH/2;
+const unW = (sx) => (sx - VW/2) / SCALE + cam.x;
+const unH = (sy) => (sy - VH/2) / SCALE + cam.y;
+
+/* ---------- the static layer ----------
+   Buildings, asphalt and street names never move. Re-stroking fifty streets
+   and re-laying twenty rotated labels on every frame cost more than
+   everything else put together — 41fps on a laptop, which would be a
+   slideshow on the cheap Android this has to run on. Bake the lot into one
+   bitmap once and blit the visible rectangle instead. */
+const Q = 1.6;                                  // cache pixels per world pixel
+const bake = document.createElement('canvas');
+bake.width = Math.ceil(WORLD.w * Q);
+bake.height = Math.ceil(WORLD.h * Q);
+/* Nothing bright. A parked car on this map is eight pixels long and there
+   are hundreds of them; any saturation at all and the street reads as
+   confetti instead of as a kerb you cannot park at. */
+const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
+                '#7a7470', '#86806f', '#737d84'];
+(function bakeWorld() {
+  const b = bake.getContext('2d');
+  b.setTransform(Q, 0, 0, Q, 0, 0);
+  /* The block interiors, and the only thing the pavement has to stand out
+     from. At #e8e3d7 against a #eceade pavement the two were a shade apart,
+     so the streets did not read as streets and the buildings sat on them
+     like ghosts. Yards are a touch darker and cooler than the pavement now. */
+  b.fillStyle = '#e1ddcd';
+  b.fillRect(0, 0, WORLD.w, WORLD.h);
+
+  const trace = st => {
+    b.beginPath();
+    st.pts.forEach((p, i) => i ? b.lineTo(p[0], p[1]) : b.moveTo(p[0], p[1]));
+  };
+  b.lineCap = 'round'; b.lineJoin = 'round';
+
+  /* Roads go down FIRST now. The buildings used to be painted under them so
+     the asphalt could cover any that bled over a kerb; they are set back from
+     the kerb by construction instead, which frees the order up — and means
+     their shadows can fall across the pavement the way shadows do. */
+  for (const pass of [0, 1]) {
+    for (const st of STREETS) {
+      const w = ROADW[st.kind] || 19;
+      b.strokeStyle = pass === 0 ? '#f0eee3'
+        : st.kind === 'arterial' ? '#a9a69d' : '#b9b6ae';
+      b.lineWidth = pass === 0 ? w + 5.5 : w;
+      trace(st); b.stroke();
+    }
+  }
+  /* ---- what makes a road here a San Francisco road ----
+     Flat grey ribbons could be anywhere. Three things carry the city from
+     above, and all three are paint: the red transit lanes down Market and
+     Van Ness, the ladder crosswalks at every corner, and both kerbs parked
+     solid end to end. */
+
+  /* Muni's red lanes. Market is transit-only down the middle and Van Ness
+     runs its buses in a red median, and nothing else in any American city
+     looks quite like it from the air. */
+  b.lineCap = 'butt';
+  for (const st of STREETS) {
+    if (st.name !== 'Market St' && st.name !== 'Van Ness Ave') continue;
+    b.strokeStyle = '#b4705f';
+    b.lineWidth = st.name === 'Market St' ? 17 : 13;
+    trace(st); b.stroke();
+    b.strokeStyle = 'rgba(255,245,230,.5)'; b.lineWidth = 0.9;
+    for (const off of st.name === 'Market St' ? [-8.5, 8.5] : [-6.5, 6.5]) {
+      b.beginPath();
+      st.pts.forEach((pt, i) => {
+        const nxt = st.pts[i + 1] || st.pts[i - 1];
+        const dx = nxt[0] - pt[0], dy = nxt[1] - pt[1], m = Math.hypot(dx, dy) || 1;
+        const x = pt[0] - dy / m * off, y = pt[1] + dx / m * off;
+        i ? b.lineTo(x, y) : b.moveTo(x, y);
+      });
+      b.stroke();
+    }
+  }
+  b.lineCap = 'round';
+
+  b.setLineDash([7, 7.5]);
+  b.strokeStyle = 'rgba(255,252,238,.72)'; b.lineWidth = 1.2;
+  for (const st of STREETS) if (st.kind === 'arterial') { trace(st); b.stroke(); }
+  b.setLineDash([]);
+
+  /* Continental crosswalks — the thick white ladders, laid on every approach
+     to every junction. The intersections were already computed when the walk
+     graph was built, so this is only paint on points we have. */
+  b.fillStyle = 'rgba(255,253,244,.78)';
+  for (const sg of segs) {
+    const half = (ROADW[STREETS[sg.si].kind] || 19) / 2;
+    const [ax, ay] = sg.a, [bx, by] = sg.b;
+    const L = Math.hypot(bx - ax, by - ay) || 1;
+    const ux = (bx - ax) / L, uy = (by - ay) / L;
+    const nx = -uy, ny = ux;
+    for (const c of sg.cuts) {
+      /* How far back to start, so the bars clear the road being crossed. */
+      let cross = 9.5;
+      for (const o of segs) {
+        if (o === sg) continue;
+        const [ox, oy] = o.a, [px, py] = o.b;
+        const dx = px - ox, dy = py - oy, Ls = dx*dx + dy*dy || 1;
+        let t = ((c[0]-ox)*dx + (c[1]-oy)*dy) / Ls; t = Math.max(0, Math.min(1, t));
+        if (Math.hypot(c[0]-(ox+dx*t), c[1]-(oy+dy*t)) < 2)
+          cross = Math.max(cross, (ROADW[STREETS[o.si].kind] || 19) / 2);
+      }
+      for (const dir of [1, -1]) {
+        const d = cross + 4.5;
+        const mx = c[0] + ux * d * dir, my = c[1] + uy * d * dir;
+        if (mx < 0 || my < 0 || mx > WORLD.w || my > WORLD.h) continue;
+        for (let o = -half + 2.4; o <= half - 2.4; o += 4.2) {
+          b.save();
+          b.translate(mx + nx * o, my + ny * o);
+          b.rotate(Math.atan2(uy, ux));
+          b.fillRect(-3.1, -1.1, 6.2, 2.2);
+          b.restore();
+        }
+      }
+    }
+  }
+
+  /* Parked solid, both sides, which is the single most reliable fact about
+     a street in this city. Thinned near the corners, where the red kerb is
+     and nobody can leave one. */
+  for (const sg of segs) {
+    const st = STREETS[sg.si];
+    if (st.kind === 'crooked') continue;
+    const half = (ROADW[st.kind] || 19) / 2;
+    const [ax, ay] = sg.a, [bx, by] = sg.b;
+    const L = Math.hypot(bx - ax, by - ay);
+    if (L < 40) continue;
+    const ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy, ny = ux;
+    const ang = Math.atan2(uy, ux);
+    for (const side of [1, -1]) {
+      for (let t = 14; t < L - 14; t += 10.5) {
+        if (rnd() < 0.22) continue;                    // the space you never find
+        const x = ax + ux * t + nx * side * (half - 2.3);
+        const y = ay + uy * t + ny * side * (half - 2.3);
+        if (sg.cuts.some(c => Math.hypot(c[0] - x, c[1] - y) < 19)) continue;
+        if (st.name === 'Market St' || st.name === 'Van Ness Ave') continue;
+        b.save();
+        b.translate(x, y); b.rotate(ang);
+        b.fillStyle = 'rgba(60,54,42,.2)';
+        b.fillRect(-4, -1.6, 8, 3.4);
+        b.fillStyle = PARKED[Math.floor(rnd() * PARKED.length)];
+        b.fillRect(-4, -1.9, 8, 3.3);
+        b.fillStyle = 'rgba(255,255,248,.22)';         // the windscreen
+        b.fillRect(1.1, -1.5, 1.9, 2.5);
+        b.restore();
+      }
+    }
+  }
+
+  /* Open ground. */
+  for (const k of PARKS) {
+    b.fillStyle = '#cfd8bf';
+    b.fillRect(k.x, k.y, k.w, k.h);
+    b.strokeStyle = 'rgba(108,118,88,.3)'; b.lineWidth = 1;
+    b.strokeRect(k.x + .5, k.y + .5, k.w - 1, k.h - 1);
+  }
+
+  /* Every shadow in the city falls the same way, from the north-west, so the
+     blocks read as solid things standing up rather than as paper shapes. */
+  b.fillStyle = 'rgba(70,64,50,.27)';
+  for (const bl of BUILDINGS) {
+    b.save();
+    /* A taller building throws a longer shadow, which is most of what
+       tells you it is taller. */
+    const k = 1.6 + bl.ht * 0.22;
+    b.translate(bl.x + k, bl.y + k * 1.2); b.rotate(bl.rot);
+    b.fillRect(-bl.w/2, -bl.d/2, bl.w, bl.d);
+    b.restore();
+  }
+
+  /* Painted city. Most of it is the grey-beige of stucco and tar, but a
+     quarter of the buildings take a muted colour, because a San Francisco
+     block that is all one tone is a San Francisco block nobody would
+     recognise. Kept desaturated: the map still has to read at a glance. */
+  /* Pitched against the #e1ddcd of the block they stand on. The first set
+     of tones sat four or five steps off the ground colour and the whole
+     city read as a watermark — at map scale a building is twenty pixels
+     wide and has to carry at that size or it is not there at all. */
+  const PLAIN = ['#c2b9a2', '#b8af97', '#cac1aa', '#bcb39b', '#c6bda6'];
+  const PAINT = ['#cbb3a7', '#b3c2ad', '#acbcc6', '#d6c498', '#c2adb9'];
+  /* Darker, for anything facing you rather than facing the sky. */
+  const shade = (hex, f) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgb(${Math.round(((n >> 16) & 255) * f)},` +
+           `${Math.round(((n >> 8) & 255) * f)},${Math.round((n & 255) * f)})`;
+  };
+
+  for (const bl of BUILDINGS) {
+    const body = bl.tint < 0.26
+      ? PAINT[Math.floor(bl.tone * PAINT.length) % PAINT.length]
+      : PLAIN[Math.floor(bl.tone * PLAIN.length) % PLAIN.length];
+    b.save();
+    b.translate(bl.x, bl.y); b.rotate(bl.rot);
+    const hw = bl.w / 2, hd = bl.d / 2, ht = bl.ht;
+
+    /* ---- the building stands up ----
+       The front `ht` of the footprint is drawn as the facade and the rest
+       as the roof behind it. Nothing is ADDED to the plan, which is the
+       whole trick: the ground each building covers is exactly what it
+       covered when they were flat rectangles, so no wall can lean out over
+       a street or into the building behind it, no painter's sort is needed
+       because nothing overlaps anything, and the streets and the pins stay
+       as readable as they were. The roofs lean away from the road rather
+       than all one way, which is the map-illustration convention rather
+       than a single camera — and it is what keeps every road clear. */
+    /* The facade has to separate from its own roof at twenty pixels wide.
+       At 0.80 the two were a shade apart and the building read as a flat
+       rectangle with a stripe on it. */
+    b.fillStyle = shade(body, 0.66);
+    b.fillRect(-hw, -hd, bl.w, ht);
+    b.fillStyle = body;
+    b.fillRect(-hw, -hd + ht, bl.w, bl.d - ht);
+
+    /* The roof plane, inset, so the parapet reads as an edge with a top. */
+    b.fillStyle = 'rgba(255,253,245,.1)';
+    b.fillRect(-hw + 1.6, -hd + ht + 1.4, bl.w - 3.2, Math.max(0, bl.d - ht - 2.8));
+
+    /* Where the facade meets the sky: the parapet cap, catching the light. */
+    b.fillStyle = 'rgba(255,253,243,.55)';
+    b.fillRect(-hw, -hd + ht - 1.1, bl.w, 1.1);
+
+    /* Bay windows, and now they are on the FRONT of the building instead of
+       flat on its roof — which is where they have always been in this city
+       and the reason the street has the texture it does. */
+    /* Bays as bold vertical strips, lit, with a dark reveal either side.
+       A grid of two-pixel sash windows was tried first and at this scale it
+       is not windows, it is hatching — the whole block came out looking
+       cross-hatched rather than built. Three marks that catch the light is
+       all the eye needs to read a San Francisco frontage. */
+    if (bl.w > 14 && ht > 4.5) {
+      const n = bl.w > 27 ? 3 : 2, bw = Math.min(6, bl.w / (n * 1.7));
+      for (let i = 0; i < n; i++) {
+        const cxb = -hw + bl.w * (i + 1) / (n + 1) - bw / 2;
+        b.fillStyle = shade(body, bl.bays ? 0.88 : 0.76);
+        b.fillRect(cxb, -hd + 0.8, bw, ht - 1.9);
+        b.fillStyle = 'rgba(38,34,28,.34)';
+        b.fillRect(cxb - 0.7, -hd + 0.8, 0.7, ht - 1.9);
+        b.fillRect(cxb + bw, -hd + 0.8, 0.7, ht - 1.9);
+      }
+    }
+
+    /* Every footprint gets an edge, or a row of them merges into one slab. */
+    b.strokeStyle = 'rgba(58,52,40,.44)'; b.lineWidth = 0.85;
+    b.strokeRect(-hw + .42, -hd + .42, bl.w - .84, bl.d - .84);
+
+    /* A stair bulkhead or a lightwell on the bigger roofs. */
+    if (bl.roof && bl.d - ht > 14) {
+      b.fillStyle = 'rgba(72,66,52,.24)';
+      b.fillRect(-hw + bl.w * 0.3, hd - (bl.d - ht) * 0.34, bl.w * 0.3, (bl.d - ht) * 0.2);
+    }
+    b.restore();
+  }
+
+  /* ---- the landmarks ----
+     These are the three places where height is the entire reason the thing
+     is on the map, and they were the only flat objects left once the blocks
+     stood up. Same convention as the blocks — the structure rises up-screen
+     off a base that stays exactly where the plot is — except that these are
+     freestanding, so they all face the same way rather than each facing its
+     own street. They are also the only objects allowed to be properly tall:
+     they sit on reserved ground in the empty quarters, so nothing of the
+     player's is behind them to hide. */
+  for (const k of PLOTS) {
+    const cx0 = k.x + k.w / 2, cy0 = k.y + k.h / 2;
+    b.save();
+    if (k.kind === 'coit' || k.kind === 'lookout') {
+      b.fillStyle = '#ccd6bc';
+      b.beginPath(); b.ellipse(cx0, cy0, k.w / 2, k.h / 2, 0, 0, 7); b.fill();
+      b.strokeStyle = 'rgba(106,118,86,.3)'; b.lineWidth = 1;
+      b.beginPath(); b.ellipse(cx0, cy0 - 4, k.w / 2 - 5, k.h / 2 - 5, 0, 0, 7); b.stroke();
+    }
+    if (k.kind === 'coit') {
+      /* A column on a hill: the shaft rises from a base at the foot of the
+         plot, with the drum and the arches at the top of it. */
+      const R = 9.5, H = 23, by = cy0 + 9, ty = by - H;
+      b.fillStyle = 'rgba(62,70,46,.32)';          // the shadow it throws
+      b.beginPath(); b.ellipse(cx0 + 5, by + 2, R * 1.15, R * 0.5, 0, 0, 7); b.fill();
+      b.fillStyle = '#b9b09a';                     // the shaft
+      b.fillRect(cx0 - R, ty, R * 2, H);
+      b.fillStyle = 'rgba(255,253,243,.28)';       // lit on its left
+      b.fillRect(cx0 - R, ty, R * 0.8, H);
+      b.strokeStyle = 'rgba(60,54,44,.3)'; b.lineWidth = 0.6;
+      for (let i = 1; i < 5; i++) {                // the fluting
+        b.beginPath(); b.moveTo(cx0 - R + i * R * 0.4, ty);
+        b.lineTo(cx0 - R + i * R * 0.4, by); b.stroke();
+      }
+      b.fillStyle = 'rgba(52,48,38,.38)';          // the observation band
+      b.fillRect(cx0 - R, ty + 4.5, R * 2, 2.4);
+      b.fillStyle = '#e8e1cf';                     // the top, seen from above
+      b.beginPath(); b.ellipse(cx0, ty, R, R * 0.52, 0, 0, 7); b.fill();
+      b.strokeStyle = 'rgba(52,48,38,.5)'; b.lineWidth = 1;
+      b.beginPath(); b.ellipse(cx0, ty, R, R * 0.52, 0, 0, 7); b.stroke();
+      b.strokeStyle = 'rgba(52,48,38,.42)';
+      b.strokeRect(cx0 - R, ty, R * 2, H);
+    }
+    if (k.kind === 'lookout') {
+      b.strokeStyle = 'rgba(90,96,78,.6)'; b.lineWidth = 1.4;
+      b.beginPath(); b.arc(cx0, cy0 + 4, k.w / 2 - 7, Math.PI * 1.15, Math.PI * 1.85); b.stroke();
+      b.fillStyle = 'rgba(96,88,70,.45)';
+      b.fillRect(cx0 - 11, cy0 + 6, 8, 2);
+      b.fillRect(cx0 + 4, cy0 + 6, 8, 2);
+    }
+    if (k.kind === 'pyramid') {
+      /* Two faces and a ridge down the middle. That silhouette is the
+         building — drawn flat as four little triangles meeting in the
+         centre it was a hip roof, which is every other roof in the city. */
+      const halfW = k.w / 2, baseY = k.y + k.h, apexY = k.y - 10;
+      b.fillStyle = 'rgba(70,64,50,.3)';
+      b.beginPath(); b.moveTo(cx0 - halfW + 4, baseY + 3);
+      b.lineTo(cx0 + halfW + 7, baseY + 3); b.lineTo(cx0 + 5, apexY + 8);
+      b.closePath(); b.fill();
+      b.fillStyle = '#d9d1bd';                     // the lit face
+      b.beginPath(); b.moveTo(cx0 - halfW, baseY); b.lineTo(cx0, baseY);
+      b.lineTo(cx0, apexY); b.closePath(); b.fill();
+      b.fillStyle = '#aaa288';                     // the shaded face
+      b.beginPath(); b.moveTo(cx0, baseY); b.lineTo(cx0 + halfW, baseY);
+      b.lineTo(cx0, apexY); b.closePath(); b.fill();
+      b.strokeStyle = 'rgba(52,48,38,.45)'; b.lineWidth = 0.9;
+      b.beginPath(); b.moveTo(cx0 - halfW, baseY); b.lineTo(cx0, apexY);
+      b.lineTo(cx0 + halfW, baseY); b.closePath(); b.stroke();
+      b.beginPath(); b.moveTo(cx0, baseY); b.lineTo(cx0, apexY); b.stroke();
+      b.fillStyle = 'rgba(52,48,38,.3)';           // the shoulders
+      b.fillRect(cx0 - halfW - 3, baseY - 9, 4, 9);
+      b.fillRect(cx0 + halfW - 1, baseY - 9, 4, 9);
+    }
+    if (k.kind === 'ferry') {
+      /* A long low shed with the clock tower standing out of the middle. */
+      const ht = 11, roofTop = k.y + ht;
+      b.fillStyle = 'rgba(70,64,50,.27)';
+      b.fillRect(k.x + 3, k.y + 3.6, k.w, k.h);
+      b.fillStyle = '#c8bfa8';                     // the roof
+      b.fillRect(k.x, roofTop, k.w, k.h - ht);
+      b.fillStyle = '#a79e87';                     // the long frontage
+      b.fillRect(k.x, k.y, k.w, ht);
+      b.fillStyle = 'rgba(255,253,243,.4)';
+      b.fillRect(k.x, roofTop - 1, k.w, 1);
+      b.fillStyle = 'rgba(42,38,30,.34)';          // the arcade along it
+      for (let i = 3; i < k.w - 3; i += 5.2) b.fillRect(k.x + i, k.y + 3, 2.6, ht - 5);
+      b.strokeStyle = 'rgba(58,52,40,.44)'; b.lineWidth = 0.85;
+      b.strokeRect(k.x + .42, k.y + .42, k.w - .84, k.h - .84);
+
+      const TW = 15, TH = 26, tx = cx0 - TW / 2, ty = k.y - TH + 6;
+      b.fillStyle = 'rgba(70,64,50,.26)';
+      b.fillRect(tx + 3, ty + 3, TW, TH);
+      b.fillStyle = '#c3baa3';                     // the tower
+      b.fillRect(tx, ty, TW, TH);
+      b.fillStyle = 'rgba(255,253,243,.3)';
+      b.fillRect(tx, ty, TW * 0.42, TH);
+      b.strokeStyle = 'rgba(52,48,38,.48)'; b.lineWidth = 0.9;
+      b.strokeRect(tx, ty, TW, TH);
+      b.fillStyle = '#f2ecdc';                     // the clock, which is right
+      b.beginPath(); b.arc(cx0, ty + 8, 4.4, 0, 7); b.fill();
+      b.strokeStyle = 'rgba(52,48,38,.6)'; b.lineWidth = 0.9;
+      b.beginPath(); b.arc(cx0, ty + 8, 4.4, 0, 7); b.stroke();
+      b.beginPath(); b.moveTo(cx0, ty + 8); b.lineTo(cx0, ty + 4.6);
+      b.moveTo(cx0, ty + 8); b.lineTo(cx0 + 2.4, ty + 9.4); b.stroke();
+      b.fillStyle = 'rgba(52,48,38,.4)';           // the cap
+      b.fillRect(tx - 1.4, ty, TW + 2.8, 2.2);
+    }
+    if (k.kind === 'square') {
+      b.fillStyle = '#cfd8bf';
+      b.fillRect(k.x, k.y, k.w, k.h);
+      b.strokeStyle = 'rgba(108,118,88,.3)'; b.lineWidth = 1;
+      b.strokeRect(k.x + .5, k.y + .5, k.w - 1, k.h - 1);
+      b.strokeStyle = 'rgba(238,234,220,.75)'; b.lineWidth = 3;
+      b.beginPath();
+      b.moveTo(k.x, k.y); b.lineTo(k.x + k.w, k.y + k.h);
+      b.moveTo(k.x + k.w, k.y); b.lineTo(k.x, k.y + k.h);
+      b.stroke();
+      /* The Dewey column, which is a column and so has to stand up too. */
+      const CH = 13;
+      b.fillStyle = 'rgba(62,70,46,.3)';
+      b.beginPath(); b.ellipse(cx0 + 3, cy0 + 2, 5, 2.4, 0, 0, 7); b.fill();
+      b.fillStyle = '#ddd6c2';
+      b.fillRect(cx0 - 2.2, cy0 - CH, 4.4, CH);
+      b.strokeStyle = 'rgba(52,48,38,.42)'; b.lineWidth = 0.7;
+      b.strokeRect(cx0 - 2.2, cy0 - CH, 4.4, CH);
+      b.fillStyle = '#efe8d6';
+      b.beginPath(); b.arc(cx0, cy0 - CH - 1.6, 2.6, 0, 7); b.fill();
+    }
+    b.restore();
+  }
+
+  /* Cable car tracks, on the two streets that carry them. Nothing runs on
+     them — they are a pair of lines that tell you which hill you are on. */
+  b.strokeStyle = 'rgba(96,90,74,.34)'; b.lineWidth = 0.8;
+  for (const st of STREETS) {
+    if (st.name !== 'California St' && st.name !== 'Hyde St') continue;
+    for (const off of [-1.9, 1.9]) {
+      b.beginPath();
+      st.pts.forEach((pt, i) => {
+        const nxt = st.pts[i + 1] || st.pts[i - 1];
+        const dx = nxt[0] - pt[0], dy = nxt[1] - pt[1];
+        const m = Math.hypot(dx, dy) || 1;
+        const x = pt[0] - dy / m * off, y = pt[1] + dx / m * off;
+        i ? b.lineTo(x, y) : b.moveTo(x, y);
+      });
+      b.stroke();
+    }
+  }
+
+  /* Trees last, over the kerb and the back yards both. */
+  /* A street tree is four pixels across on this map. Pale sage at seventeen
+     percent shadow made them read as smudges, so they get a deeper green, a
+     shadow you can see and an outline to hold the shape at that size. */
+  for (const t of TREES) {
+    b.fillStyle = 'rgba(54,62,40,.26)';
+    b.beginPath(); b.ellipse(t.x + 1.9, t.y + 2.3, t.r, t.r * .86, 0, 0, 7); b.fill();
+    b.fillStyle = t.tone > .66 ? '#6c7f54' : t.tone > .33 ? '#788b60' : '#84976c';
+    b.beginPath(); b.arc(t.x, t.y, t.r, 0, 7); b.fill();
+    b.strokeStyle = 'rgba(52,60,38,.4)'; b.lineWidth = 0.6;
+    b.beginPath(); b.arc(t.x, t.y, t.r, 0, 7); b.stroke();
+    b.fillStyle = 'rgba(255,255,230,.26)';
+    b.beginPath(); b.arc(t.x - t.r * .3, t.y - t.r * .32, t.r * .42, 0, 7); b.fill();
+  }
+
+  b.font = '8px ui-sans-serif,system-ui,sans-serif';
+  b.fillStyle = 'rgba(60,56,48,.62)';
+  b.textAlign = 'center'; b.textBaseline = 'middle';
+  for (const st of STREETS) {
+    if (st.label === false) continue;
+    const a = st.pts[0], z = st.pts[st.pts.length - 1];
+    const ang = Math.atan2(z[1] - a[1], z[0] - a[0]);
+    b.save();
+    b.translate((a[0] + z[0]) / 2, (a[1] + z[1]) / 2);
+    b.rotate(Math.abs(ang) > Math.PI / 2 ? ang + Math.PI : ang);
+    b.fillText(st.name.toUpperCase(), 0, 0);
+    b.restore();
+  }
+})();
+
+function paint() {
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  /* Must match the baked ground exactly. It did not after the blocks were
+     rebuilt, and the mismatch drew a hard vertical seam down the screen
+     wherever the view ran past the edge of the world — which is now most
+     of the time out by the Ferry Building and Union Square. */
+  cx.fillStyle = '#e1ddcd'; cx.fillRect(0, 0, VW, VH);
+
+  /* one blit for the whole city */
+  const sx = (cam.x - VW / (2 * SCALE)) * Q, sy = (cam.y - VH / (2 * SCALE)) * Q;
+  cx.drawImage(bake, sx, sy, (VW / SCALE) * Q, (VH / SCALE) * Q, 0, 0, VW, VH);
+
+  /* places */
+  const run = s.run;
+  for (const p of PLACES) {
+    const x = W(p.at[0]), y = H(p.at[1]);
+    if (x < -70 || y < -70 || x > VW+70 || y > VH+70) continue;
+    const target = run && ((!run.picked && run.from === p.id) || (run.picked && run.to === p.id));
+    const col = target ? '#a8451f'
+      : p.kind === 'work' ? '#1f6f5c'
+      : p.kind === 'food' ? '#b8832a'
+      : p.kind === 'couch' || p.kind === 'apartment' || p.kind === 'room' ? '#3b5d8f'
+      : p.kind === 'landmark' ? '#7a6a92'
+      : p.kind === 'night' ? '#9c4f6a'          // a bar is not a laundromat
+      : '#6a6a78';
+    /* A chip with the place's own emoji in it. A coloured dot could only ever
+       say which CATEGORY something was, and only once you had found the key;
+       the icon says what the place actually is at a glance. The ring keeps
+       the category, so both readings survive. */
+    const r = (target ? 12 : 10) * Math.max(.82, SCALE);
+    if (target) {
+      cx.beginPath(); cx.arc(x, y, r + 7 + Math.sin(Date.now()/280)*2.5, 0, 7);
+      cx.fillStyle = 'rgba(168,69,31,.2)'; cx.fill();
+    }
+    cx.beginPath(); cx.arc(x, y, r, 0, 7);
+    cx.fillStyle = '#fffdf8'; cx.fill();
+    cx.strokeStyle = col; cx.lineWidth = Math.max(2, 2.6 * SCALE); cx.stroke();
+    if (p.icon) {
+      cx.font = `${r * 1.15}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",system-ui`;
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(p.icon, x, y + r * 0.06);
+    } else {
+      cx.beginPath(); cx.arc(x, y, r * 0.45, 0, 7);
+      cx.fillStyle = col; cx.fill();
+    }
+
+    if (SCALE > .8 || target) {
+      cx.font = `600 ${Math.max(9.5, 11*SCALE)}px ui-sans-serif,system-ui,sans-serif`;
+      cx.textAlign = 'center'; cx.textBaseline = 'bottom';
+      const t = p.name;
+      const w = cx.measureText(t).width;
+      /* Landmarks now stand up out of their own plot, so a label above the
+         pin covers the thing it is naming — Coit Tower labelled its own
+         shaft out of existence. Those sit below instead. */
+      const below = p.kind === 'landmark';
+      const ly = below ? y + r + 17 : y - r - 3;
+      cx.fillStyle = 'rgba(255,253,248,.88)';
+      cx.fillRect(x - w/2 - 4, ly - 13, w + 8, 14);
+      cx.fillStyle = '#20202a';
+      cx.fillText(t, x, ly);
+    }
+  }
+
+  /* ---- the pointer to an off-screen target ----
+     Nothing walks you to the pickup or the drop any more, so the target has
+     to be findable from anywhere. When it is off the edge, a marker rides
+     the border pointing at it, with the name and how far. Without this the
+     app names a place that may be nowhere on screen and leaves you to hunt. */
+  if (s.run && !s.over) {
+    const tgt = PLACES.find(p => p.id === (s.run.picked ? s.run.to : s.run.from));
+    if (tgt) {
+      const tx = W(tgt.at[0]), ty = H(tgt.at[1]);
+      /* The border it rides has to clear the HUD, or a target to the north
+         puts the arrow underneath the stat chips and goal strip, where it is
+         drawn correctly and seen by nobody. */
+      const mL = 58, mR = 58, mT = 150, mB = 120;
+      if (tx < mL || ty < mT || tx > VW - mR || ty > VH - mB) {
+        const ox = VW / 2, oy = VH / 2;
+        let dx = tx - ox, dy = ty - oy;
+        const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+        /* Ride the border: the nearer of the two wall crossings. */
+        const hx = Math.abs(dx) > 1e-4 ? (dx > 0 ? (VW - mR - ox) : (mL - ox)) / dx : Infinity;
+        const hy = Math.abs(dy) > 1e-4 ? (dy > 0 ? (VH - mB - oy) : (mT - oy)) / dy : Infinity;
+        const t = Math.min(hx, hy);
+        const ex = ox + dx * t, ey = oy + dy * t;
+
+        /* A city block here is 120 world px and a real one is about 80m. */
+        const metres = Math.round(
+          Math.hypot(tgt.at[0] - me.x, tgt.at[1] - me.y) * 0.67 / 10) * 10;
+
+        cx.save();
+        cx.translate(ex, ey);
+        cx.rotate(Math.atan2(dy, dx));
+        cx.beginPath();
+        cx.moveTo(15, 0); cx.lineTo(-7, 10); cx.lineTo(-3, 0); cx.lineTo(-7, -10);
+        cx.closePath();
+        cx.fillStyle = '#a8451f'; cx.fill();
+        cx.strokeStyle = '#fffdf8'; cx.lineWidth = 2; cx.stroke();
+        cx.restore();
+
+        const label = `${tgt.name} · ${metres}m`;
+        cx.font = `600 12px ui-sans-serif,system-ui,sans-serif`;
+        cx.textAlign = 'center'; cx.textBaseline = 'middle';
+        const w = cx.measureText(label).width + 14;
+        /* Keep the label inboard of the arrow so it never clips the edge. */
+        const lx = Math.max(w / 2 + 4, Math.min(VW - w / 2 - 4, ex - dx * 26));
+        const ly = Math.max(14, Math.min(VH - 14, ey - dy * 26));
+        cx.beginPath();
+        if (cx.roundRect) cx.roundRect(lx - w / 2, ly - 10, w, 20, 10);
+        else cx.rect(lx - w / 2, ly - 10, w, 20);
+        cx.fillStyle = 'rgba(43,43,49,.92)'; cx.fill();
+        cx.fillStyle = '#f6f4ee';
+        cx.fillText(label, lx, ly);
+      }
+    }
+  }
+
+  /* the route you are walking */
+  if (me.path.length) {
+    cx.strokeStyle = 'rgba(31,111,92,.5)';
+    cx.lineWidth = Math.max(2, 3*SCALE); cx.setLineDash([6*SCALE, 6*SCALE]);
+    cx.beginPath(); cx.moveTo(W(me.x), H(me.y));
+    me.path.forEach(n => cx.lineTo(W(n.x), H(n.y)));
+    cx.stroke(); cx.setLineDash([]);
+  }
+
+  /* traffic, under the people — a pedestrian on a crossing should read as
+     being in front of the car that is waiting for them */
+  const carS = Math.max(0.85, 1.15 * SCALE);
+  for (const c of CARS) {
+    /* Hold the right-hand lane: rotate the heading a quarter turn and step
+       off the centre line by half a lane. Without this, oncoming traffic
+       drives straight through itself down the middle of every street. */
+    const half = halfOf(c.at, c.to && c.to.k);
+    /* Half-way out from the centre line is the middle of the near lane.
+       Scooters filter nearer the kerb, which is where they really ride. */
+    const lane = half * (c.kind.id === 'scoot' ? 0.78 : 0.5);
+    const ox = -Math.sin(c.heading) * lane, oy = Math.cos(c.heading) * lane;
+    const x = W(c.x + ox), y = H(c.y + oy);
+    if (x < -60 || y < -60 || x > VW + 60 || y > VH + 60) continue;
+    drawVehicle(cx, { x, y, heading: c.heading, scale: carS,
+                      kind: c.kind, braking: c.frozen > 0 });
+  }
+
+  /* everybody else, drawn under you and culled hard — fifty figures is
+     nothing to update but it is real work to rasterise */
+  const pedS = Math.max(1, 1.25 * SCALE);
+  for (const p of PEDS) {
+    /* Out past the kerb onto the pavement, on their own side of the street.
+       Walking the bare centre line put every pedestrian in the traffic. */
+    const off = halfOf(p.at, p.to && p.to.k) + 4.2;
+    const ox = -Math.sin(p.heading) * off * p.side;
+    const oy =  Math.cos(p.heading) * off * p.side;
+    const x = W(p.x + ox), y = H(p.y + oy);
+    if (x < -30 || y < -30 || x > VW + 30 || y > VH + 30) continue;
+    drawWalker(cx, { x, y, heading: p.heading, phase: p.phase,
+                     scale: pedS, moving: true, ...p.look });
+  }
+
+  /* You walk a pavement like everybody else. */
+  const myOff = halfOf(me.at, me.path[0] && me.path[0].k) + 4.2;
+  const mx = me.x - Math.sin(me.heading) * myOff;
+  const my = me.y + Math.cos(me.heading) * myOff;
+
+  /* ---- you ----
+     A half-transparent ring and the default walker colours, which are the
+     same navy coat one of the five pedestrian looks already wears. On a
+     block with twenty people on it you could not find yourself, and the one
+     figure the player controls is the one thing that has to be findable at
+     a glance.
+
+     So: a pad to stand on, a ring at full strength, a coat in the game's
+     own green that nobody else in the city wears, and a size above
+     everybody else's. */
+  const px = W(mx), py = H(my);
+  const R = Math.max(14, 17 * SCALE);
+  cx.beginPath(); cx.arc(px, py + 2.5, R, 0, 7);
+  cx.fillStyle = 'rgba(26,22,16,.16)'; cx.fill();
+  cx.beginPath(); cx.arc(px, py, R, 0, 7);
+  cx.fillStyle = 'rgba(255,253,243,.8)'; cx.fill();
+  cx.strokeStyle = '#1f6f5c';
+  cx.lineWidth = Math.max(2.2, 2.9 * SCALE);
+  cx.stroke();
+
+  drawWalker(cx, {
+    x: px, y: py,
+    heading: me.heading, phase: me.phase,
+    scale: Math.max(1.3, 1.7 * SCALE),
+    moving: me.walking,
+    skin: '#c98f63', coat: '#1f6f5c', trouser: '#2b3540', hair: '#241c18',
+    /* the insulated bag only once the order is actually in your hands */
+    pack: s.run && s.run.picked ? '#a8451f' : null,
+  });
+}
+
+/* ====================================================================
+   WALKING
+   ==================================================================== */
+/* You are on foot, so you have to read as on foot: quicker than the people
+   ambling past (15-29) and slower than the slowest thing on the road (38).
+   At 118 you overtook every car in the city, which made the whole street
+   look wrong. This is only affordable because the delivery clock now starts
+   at the pickup rather than at the accept — see acceptRun. */
+const SPEED = 34;                 // world px per second
+
+/* One sound per foot, taken off the walk cycle rather than off a timer, so
+   the steps stay with the legs however the camera is moving and stop dead
+   when you do. Half a cycle is a step. */
+let lastFoot = 0, bellTimer = 6;
+function footfall() {
+  const half = Math.floor(me.phase / Math.PI);
+  if (half !== lastFoot) { lastFoot = half; SND.step(); }
+}
+function goTo(wx, wy) {
+  if (!nodes.has(me.at)) me.at = nearestNode(me.x, me.y).node.k;   // self-heal
+
+  /* Tapping a place means "take me to that door". Routing to whatever node
+     happens to be nearest the tap instead used to stop the player a single
+     node short of the door, where nothing opens and nothing explains why. */
+  let target = null;
+  let bestD = 46;
+  for (const p of PLACES) {
+    const d = Math.hypot(p.at[0] - wx, p.at[1] - wy);
+    if (d < bestD) { bestD = d; target = p.door.k; }
+  }
+
+  if (!target) {
+    const near = nearestNode(wx, wy);
+    if (near.dist > 90) return;   // tapped the middle of a block
+    target = near.node.k;
+  }
+
+  /* Already standing at the door: route returns an empty path, so nothing
+     moves and arrived() never fires. Open the place instead of doing nothing. */
+  if (target === me.at) { arrived(me.at); return; }
+
+  const p = route(me.at, target);
+  /* Only when a route was actually found. A tap on the middle of a block
+     returns above without a sound, which is the honest answer: nothing
+     happened. */
+  if (p) { me.path = p; SND.ping('tap'); }
+}
+
+/* Drag the map with a finger or the mouse; a tap that did not drag is a
+   walk order. The 9px threshold is what separates the two — without it every
+   slightly smudged tap on a phone registers as a drag and the player never
+   goes anywhere. */
+let drag = null;
+cv.addEventListener('pointerdown', e => {
+  /* Record the gesture BEFORE capturing. setPointerCapture throws on a
+     pointer id the browser does not recognise, and with the capture first
+     that exception aborted the handler, left `drag` null, and every tap
+     after it did nothing at all — no walk, no error, no clue. */
+  drag = { x0: e.clientX, y0: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+  try { cv.setPointerCapture(e.pointerId); } catch {}
+});
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+  if (!drag.moved && Math.hypot(dx, dy) > 9) drag.moved = true;
+  if (!drag.moved) return;
+  cam.free = true;
+  cam.x = drag.cx - dx / SCALE;
+  cam.y = drag.cy - dy / SCALE;
+  clampCam();
+});
+function endDrag(e) {
+  if (drag && !drag.moved) {
+    const r = cv.getBoundingClientRect();
+    /* Read the tap against the panned view FIRST, then hand the camera back. */
+    const wx = unW(e.clientX - r.left), wy = unH(e.clientY - r.top);
+    cam.free = false;
+    goTo(wx, wy);
+  }
+  drag = null;
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', () => { drag = null; });
+
+function stepPlayer(d) {
+  const here = nodes.get(me.at);
+  if (!here) return;
+  let best = null, bs = 0.55;
+  for (const k of here.to) {
+    const n = nodes.get(k);
+    const L = Math.hypot(n.x-here.x, n.y-here.y) || 1;
+    const dot = ((n.x-here.x)/L)*d[0] + ((n.y-here.y)/L)*d[1];
+    if (dot > bs) { bs = dot; best = n; }
+  }
+  if (best) me.path = [best];
+}
+
+addEventListener('keydown', e => {
+  /* Arrows pan the map. WASD walks. Both wanted a keyboard, and one set of
+     keys cannot do both without the map lurching every time you take a step. */
+  const pan = { ArrowUp:[0,-1], ArrowDown:[0,1],
+                ArrowLeft:[-1,0], ArrowRight:[1,0] }[e.key];
+  if (pan) {
+    e.preventDefault();
+    cam.free = true;
+    cam.x += pan[0] * 80; cam.y += pan[1] * 80;
+    clampCam();
+    return;
+  }
+  const walk = { w:[0,-1], s:[0,1], a:[-1,0], d:[1,0] }[e.key.toLowerCase()];
+  if (walk) { e.preventDefault(); cam.free = false; stepPlayer(walk); }
+});
+
+/* ====================================================================
+   ARRIVALS
+   ==================================================================== */
+function arrived(nodeK) {
+  me.at = nodeK;
+  const here = PLACES.filter(p => p.door.k === nodeK);
+  let onBusiness = false;
+  const hadPicked = !!(s.run && s.run.picked);
+  for (const p of here) {
+    const line = G.atPlace(s, p.id);
+    if (line) {
+      G.say(s, line, 'good'); flash(line, 'good'); onBusiness = true;
+      /* The collection and the payment are the two beats of a delivery and
+         they should not sound the same. */
+      SND.ping(s.run && s.run.picked ? 'pickup' : 'paid');
+    }
+  }
+
+  /* Carry straight on to the drop. Only on the collection itself, never on
+     any later arrival — otherwise stopping off to eat while you are carrying
+     would drag you back onto the route you chose to leave. */
+  if (!hadPicked && s.run && s.run.picked) {
+    const drop = PLACES.find(p => p.id === s.run.to);
+    if (drop) me.path = route(nodeK, drop.door.k) || [];
+  }
+  /* Every pickup is a restaurant or a shop, so arriving for a collection used
+     to pop the shop's own sheet with "Eat · $11" sitting there as the green
+     primary button. Tap through at the moment you expect to be PAID and you
+     have just spent eleven dollars instead. If the stop was delivery
+     business, say so and leave; the player can tap the place to go in. */
+  if (here.length && !onBusiness) openPlace(here[0]);
+  const sb = G.maybeSetback(s);
+  if (sb) { G.say(s, sb, 'bad'); flash(sb, 'bad'); SND.ping('bad'); }
+  persist();
+}
+
+/* ====================================================================
+   UI
+   ==================================================================== */
+const $ = id => document.getElementById(id);
+const veil = $('veil'), sheet = $('sheet');
+
+function flash(text, kind='') {
+  const d = document.createElement('div');
+  d.className = 'line ' + kind; d.textContent = text;
+  $('msg').append(d);
+  setTimeout(() => d.remove(), 4200);
+  while ($('msg').children.length > 3) $('msg').firstChild.remove();
+}
+function close() { veil.style.display = sheet.style.display = 'none'; }
+veil.onclick = close;
+function open(html) {
+  SND.ping('panel');
+  sheet.innerHTML = html;
+  veil.style.display = 'block'; sheet.style.display = 'block';
+}
+
+function hud() {
+  $('cash').textContent = G.money(s.money);
+  $('day').textContent = s.day;
+  $('time').textContent = G.clock(s.time);
+  $('efill').style.width = Math.max(0, s.energy) + '%';
+  $('efill').style.background = s.energy < 25 ? 'var(--warn)' : 'var(--go)';
+  const r = G.rung(s);
+  $('rung').textContent = G.rungLabel(r, s);
+  /* Once the run is over, a half-finished delivery is not the headline. */
+  const goal = G.rungGoal(r, s);
+  $('rgoal').textContent = s.over ? goal
+    : s.run
+      ? (s.run.picked ? `Deliver to ${G.placeName(s.run.to)} by ${G.clock(s.run.due)}`
+                      : `Pick up at ${G.placeName(s.run.from)}`)
+      : goal;
+  $('act').textContent = s.run ? 'Drop this run' : 'Find work';
+}
+
+$('back').onclick = () => { cam.free = false; };
+
+/* The goal strip tells you to get a resume together and says nothing about
+   where one lives — it is two taps away under a button marked You. Making
+   the strip itself open that panel turns the compass into the thing you
+   press, which is where a player's finger already goes. */
+$('goal').onclick = () => { s.over ? showEnd() : $('me').click(); };
+
+/* ---- delivery offers ---- */
+$('act').onclick = () => {
+  if (s.run) {
+    G.say(s, 'You dropped the run.', 'bad'); flash('You dropped the run.', 'bad');
+    s.run = null; hud(); persist(); return;
+  }
+  G.refreshOffers(s);
+  open(`<h2>Delivery app</h2>
+    <div class="sub">Three nearby. The clock starts when you collect.</div>
+    ${s.offers.map(o => `
+      <div class="row">
+        <div>
+          <div class="l">${G.placeName(o.from)} &rarr; ${G.placeName(o.to)}</div>
+          <div class="d">${o.minutes} min once you have it</div>
+        </div>
+        <div style="display:flex;gap:11px;align-items:center">
+          <!-- The bare green number could as easily have been the price of
+               the food. Say what it is. -->
+          <div style="text-align:right;line-height:1.15">
+            <div class="pay">${G.money(o.pay)}</div>
+            <div class="d" style="font-size:11px">to you</div>
+          </div>
+          <button data-take="${o.id}">Take</button>
+        </div>
+      </div>`).join('')}
+    <div class="note">The app shows the guaranteed pay. The tip shows up after.</div>`);
+  sheet.querySelectorAll('[data-take]').forEach(b => b.onclick = () => {
+    G.acceptRun(s, b.dataset.take);
+    /* acceptRun refuses when a run is already live or the offer has gone
+       stale, and it says so by leaving s.run alone. Reading s.run.from
+       without checking threw on null and killed the click handler. */
+    const p = s.run && PLACES.find(q => q.id === s.run.from);
+    if (!p) { close(); hud(); return; }
+    flash(`Pick up at ${p.name}.`);
+    me.path = route(me.at, p.door.k) || [];
+    close(); hud(); persist();
+  });
+};
+
+/* ---- you ----
+   Everything about your own situation in one place. All of this was already
+   being tracked and none of it was anywhere on screen: whether you had a
+   resume, where you had handed it in, how many nights of couch were left.
+   The map key lives down here too, because five colours were each doing real
+   work on the map and the game never said what any of them meant. */
+const KEY = [
+  ['#1f6f5c', 'Hiring'],
+  ['#b8832a', 'Somewhere to eat'],
+  ['#6a6a78', 'Shop'],
+  ['#9c4f6a', 'Somewhere to go out'],
+  ['#3b5d8f', 'Where you sleep'],
+  ['#7a6a92', 'Landmark'],
+  ['#a8451f', 'Where you are headed'],
+];
+
+$('me').onclick = () => {
+  const r = s.resume;
+  const left = G.COUCH_DAYS - s.day;
+  const bed = s.leased
+    ? ['Your own place', `Studio on Larkin. ${G.money(G.RENT)} every 30 days.`]
+    : s.sro
+    ? ['A room at the Alder',
+       `One room, shared bathroom. ${G.money(G.SRO_RENT)} a month, no lease.`]
+    : [`${G.hostOf(s).name}'s couch`, left > 0
+        ? `${left} night${left === 1 ? '' : 's'} before he wants it back.`
+        : 'He wants it back.'];
+  /* Shifts worked is what the landlord counts, and it was nowhere on screen
+     — so neither the wage nor the pay stubs it earns you were visible. */
+  const work = s.job
+    ? [s.job.role, `${s.job.where} · ${G.money(s.job.pay)} an hour · ` +
+        (s.shifts >= G.STUBS_NEEDED
+          ? `${s.shifts} shifts worked`
+          : `${s.shifts} of ${G.STUBS_NEEDED} pay stubs a landlord wants`)]
+    : ['No steady job yet', 'Deliveries are paying for now.'];
+  const cv = r
+    ? [r.tags.join(', '), `Handed in ${s.applied.length} place${s.applied.length === 1 ? '' : 's'} today.`]
+    : ['No resume yet', 'Places want one before they will hire you.'];
+
+  const row = ([l, d], right = '') => `<div class="row"><div>
+      <div class="l">${esc(l)}</div><div class="d">${esc(d)}</div></div>
+      ${right ? `<span class="pay">${right}</span>` : ''}</div>`;
+
+  /* "Every dollar counts" only means something if the player can see the
+     dollars. Earned is what the game actually tracks toward the next rung,
+     and it was nowhere on screen. */
+  /* Point at the best door actually open to you. On the couch it used to
+     always say "toward a room" even once the lease was approved and
+     affordable, which quietly undersold where the player had got to. */
+  const target = !s.leased
+    ? (G.canSign(s).ok ? ['You could sign the Larkin lease today', G.money(G.MOVE_IN_COST)]
+       : s.sro ? ['Toward a lease of your own', G.money(G.MOVE_IN_COST)]
+       : ['Toward a room at the Alder', G.money(G.SRO_MOVE_IN)])
+    /* The row went blank the moment the lease was signed, so the whole back
+       half of the game — the car, and the $4,200 you are saving for it —
+       had no target anywhere on screen. */
+    : !s.car ? ['Toward a car, on the board at Hyde St Market', G.money(G.CAR_COST)]
+    : null;
+
+  /* How it is going with them, in words. The number behind this was the
+     invisible gate in the game: the goal strip says "find a place together"
+     the day you meet, and the apartment offers nothing for another six
+     evenings, with nothing anywhere to say why or how far along you are. */
+  const how = c =>
+      c >= G.CLOSE_ENOUGH ? 'Ask them at your place. They would say yes.'
+    : c >= 70 ? 'You have started talking about somewhere together.'
+    : c >= 35 ? 'You see each other most weeks.'
+    : 'Early days.';
+  const prefLabel = (G.PREFS.find(x => x.id === s.pref) || {}).label;
+
+  open(`<h2>You</h2>
+    <div class="sub">Day ${s.day} in San Francisco.</div>
+    ${row(bed)}
+    ${row(work)}
+    ${row(cv)}
+    ${row(['Earned since you arrived',
+           target ? `${target[0]} — ${target[1]}` : 'Your own lease, signed.'],
+          G.money(s.earned))}
+    ${s.friends ? row(['People you know', `${s.friends} so far`]) : ''}
+    ${s.car ? row(['A car', 'Fifteen years old. Parking is your problem now.']) : ''}
+    ${s.partner ? row([`Seeing ${esc(s.partner.name)}`, how(s.partner.closeness)])
+      : G.socialOpen(s) ? `<div class="row"><div>
+          <div class="l">Hoping to meet</div>
+          <div class="d">${prefLabel ? esc(prefLabel) : 'You have not thought about it.'}</div>
+          </div><button id="pref2">${prefLabel ? 'Change' : 'Decide'}</button></div>`
+      : ''}
+
+    <h2 style="margin-top:18px">Your resume</h2>
+    <div class="sub">${r ? 'This is what you hand over.' : 'Paste a real one, or put one together.'}</div>
+    <input type="text" id="rname" placeholder="Name" value="${r ? esc(r.name) : ''}">
+    <div class="tags" id="rtags">
+      ${G.TAGS.map(t => `<span class="tag${r && r.tags.includes(t) ? ' on' : ''}" data-t="${t}">${t}</span>`).join('')}
+    </div>
+    <textarea id="rpaste" placeholder="Or paste your actual resume here and it will pick the tags out."></textarea>
+    <div class="note">Pasted text never leaves this browser. It is read here, saved on
+      this device, and never sent anywhere — a real resume has your real name,
+      phone and address on it.</div>
+    <div class="stack">
+      <button class="p" id="rsave">Save resume</button>
+      <button id="rclose">Close</button>
+    </div>
+
+    ${SND.available() ? `<div class="row"><div>
+        <div class="l">Sound</div>
+        <div class="d">Footsteps, traffic, and the cable car when you are near it.</div>
+        </div><button id="snd">${SND.isOn() ? 'On' : 'Off'}</button></div>` : ''}
+
+    <h2 style="margin-top:20px">The map</h2>
+    <div class="key">${KEY.map(([c, t]) =>
+      `<span><i style="background:${c}"></i>${t}</span>`).join('')}</div>
+    <div class="note">Tap a street to walk there. Drag the map, or use the arrow
+      keys, to look around.</div>`);
+  if ($('pref2')) $('pref2').onclick = () => askPref();
+  if ($('snd')) $('snd').onclick = () => {
+    SND.setOn(!SND.isOn());
+    $('snd').textContent = SND.isOn() ? 'On' : 'Off';
+  };
+  sheet.querySelectorAll('.tag').forEach(t =>
+    t.onclick = () => t.classList.toggle('on'));
+  $('rpaste').oninput = e => {
+    if (e.target.value.length < 24) return;
+    const found = G.readResume(e.target.value);
+    sheet.querySelectorAll('.tag').forEach(t =>
+      t.classList.toggle('on', found.includes(t.dataset.t)));
+  };
+  $('rclose').onclick = close;
+  $('rsave').onclick = () => {
+    const tags = [...sheet.querySelectorAll('.tag.on')].map(t => t.dataset.t);
+    G.setResume(s, { name: $('rname').value, tags });
+    flash('Resume saved. Now go and hand it to someone.', 'good');
+    close(); hud(); persist();
+  };
+};
+
+const esc = t => String(t).replace(/[<>&"]/g, c =>
+  ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;' }[c]));
+
+/* ---- who you are hoping to meet ----
+   This card is the ONLY place s.pref is ever set, and goOut cannot introduce
+   anybody without it. It used to be raised once, by buying a car, and never
+   again — which broke the ending two separate ways.
+
+   One: the card closes on a tap outside the sheet like every other sheet in
+   the game, so a stray tap set pref to nothing, permanently, with no way back
+   and nothing on screen to say what had happened.
+
+   Two: the car is sold only to a player who has signed a lease, and a player
+   living at the Alder may never sign one — the room exists precisely because
+   one service wage cannot clear a studio's income test. Simulated: 400 nights
+   out, 255 friends, nobody ever met, the game never ending.
+
+   So it is asked at the door of the first night out, and can be changed any
+   time from You. `then` runs the evening the player came here to have. */
+function askPref(then) {
+  open(`<h2>Who are you hoping to meet?</h2>
+    <div class="sub">All this decides is who a friend thinks to introduce you
+      to. You can change it under You.</div>
+    ${G.PREFS.map(p => `<button class="p" style="width:100%;margin-bottom:9px"
+        data-p="${p.id}">${p.label}</button>`).join('')}
+    <button id="pskip" style="width:100%">Not thinking about it</button>`);
+  sheet.querySelectorAll('[data-p]').forEach(b => b.onclick = () => {
+    G.setPref(s, b.dataset.p);
+    close(); hud(); persist();
+    if (then) then();
+  });
+  $('pskip').onclick = close;
+}
+
+/* ---- the end ----
+   Shown for both endings. Without this the game simply stopped responding
+   when the couch ran out: G.tick returns early on s.over and nothing ever
+   told the player why the world had gone quiet. */
+let endShown = false;
+function showEnd() {
+  if (endShown) return;
+  endShown = true;
+  const e = G.ending(s);
+  SND.ping(e.good ? 'end' : 'lost');
+  open(`<h2>${esc(e.title)}</h2>
+    <div class="sub">${esc(e.body)}</div>
+    <div class="row"><div><div class="l">Day ${s.day}</div>
+      <div class="d">${s.runs} deliveries &middot; ${s.nights} nights out</div></div>
+      <span class="pay">${G.money(s.money)}</span></div>
+    <div class="note" style="margin-bottom:12px">${e.good
+      ? 'You met your current goals. Do you want to start over?'
+      : 'Do you want to start over?'}</div>
+    <button class="p" style="width:100%;margin-bottom:9px" id="share">Share your run</button>
+    <button style="width:100%;margin-bottom:9px" id="again">Start over</button>
+    <button style="width:100%" id="stay">${e.good
+      ? 'Stay in San Francisco' : 'Look at the city one more time'}</button>`);
+  veil.onclick = null;                       // this one you have to answer
+
+  /* G.shareText() has existed since the first week and nothing has ever
+     called it. A game that spreads by being posted needs the player to be
+     able to post it, and the end card — the one moment they have a result
+     worth showing — had no way to. navigator.share opens the real share
+     sheet on a phone; the clipboard is the fallback everywhere else. */
+  $('share').onclick = async () => {
+    const text = G.shareText(s);
+    const url = location.origin === 'null' ? '' : location.origin + location.pathname;
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Broke in SF', text, url }); return; }
+      await navigator.clipboard.writeText(url ? `${text}\n${url}` : text);
+      $('share').textContent = 'Copied. Go and paste it somewhere.';
+    } catch {
+      /* They dismissed the sheet, or the clipboard is blocked. Neither is
+         an error worth a message. */
+    }
+  };
+
+  $('again').onclick = () => {
+    try { localStorage.removeItem(SAVE); } catch {}
+    location.reload();
+  };
+  /* The only way out of this card used to be wiping the save. It is the one
+     screen a player might want to sit with — and the city is still there
+     behind it. Closing it leaves them standing in it; the goal strip brings
+     the card back. */
+  $('stay').onclick = () => { endShown = false; close(); };
+}
+
+/* ---- you have to eat ----
+   Raised once per day the moment energy runs low. You still have to walk
+   there and pay at the counter — picking from this list only sets the
+   route — but the day no longer lets you quietly skip the one expense
+   nobody in this city avoids. */
+let askedFoodOn = 0;
+function foodCard() {
+  const here = nodes.get(me.at);
+  const walk = p => {
+    const d = Math.hypot(p.at[0] - me.x, p.at[1] - me.y);
+    return Math.round(d * 0.67 / 10) * 10;             // metres, roughly
+  };
+  open(`<h2>You need to eat</h2>
+    <div class="sub">Energy is down to ${Math.round(s.energy)}. Nothing on this
+      list is free, and that is rather the point.</div>
+    ${G.FOOD_PLACES.map(p => `
+      <div class="row">
+        <div>
+          <div class="l">${p.icon} ${esc(p.name)}</div>
+          <div class="d">+${p.energy} energy &middot; ${walk(p)}m away</div>
+        </div>
+        <div style="display:flex;gap:11px;align-items:center">
+          <span class="pay">${G.money(p.cost)}</span>
+          <button data-eat="${p.id}"${s.money < p.cost ? ' disabled' : ''}>Go</button>
+        </div>
+      </div>`).join('')}
+    <div class="note" style="margin-bottom:12px">Keep working on an empty
+      stomach and you will stop in the street for an hour instead.</div>
+    <button style="width:100%" id="skipfood">Later</button>`);
+  sheet.querySelectorAll('[data-eat]').forEach(b => b.onclick = () => {
+    const p = PLACES.find(q => q.id === b.dataset.eat);
+    me.path = route(me.at, p.door.k) || [];
+    flash(`${p.name}. ${G.money(p.cost)} when you get there.`);
+    close(); hud(); persist();
+  });
+  $('skipfood').onclick = close;
+}
+
+/* ---- standing outside a place ---- */
+function openPlace(p) {
+  const acts = [];
+  /* Anywhere that sells something, not just the restaurants — the corner
+     store has a price and an energy value too, and gating this on the
+     'food' kind sent you there with nothing to buy when you arrived. */
+  if (p.cost != null && p.energy != null)
+    acts.push([`Eat &middot; ${G.money(p.cost)} &middot; +${p.energy} energy`,
+               () => { SND.ping('eat'); done(G.eat(s, p)); }]);
+  if (p.kind === 'work') {
+    const mine = s.job && s.job.id === p.id;
+    /* Your own workplace is not a job ad. It kept offering to take a resume
+       from somebody it had already employed. */
+    if (!mine) acts.push([`Hand in your resume`, () => {
+      const r = G.apply(s, p);
+      SND.ping(r.ok ? 'hired' : 'no');
+      done(r.line, r.ok ? 'good' : '');
+    }]);
+    if (mine) {
+      const sp = G.shiftPreview(s);
+      acts.push([sp.tooLate
+        ? 'Too late to start a shift'
+        : `Work the shift &middot; ${sp.hours}h &middot; about ${G.money(sp.net)} after tax`,
+        () => { SND.ping('shift'); done(G.workShift(s), 'good'); }]);
+    }
+  }
+  if (p.kind === 'night' && G.socialOpen(s)) {
+    /* Once there is somebody, the button stopped being about meeting people
+       and never said so — "Go out" is what you tap for the eighth evening
+       running with the person the rest of the game is about. */
+    const can = G.canGoOut(s, p);
+    const label = !can.ok ? can.why
+      : s.partner
+      ? `Take ${esc(s.partner.name)} out${p.cost ? ' &middot; ' + G.money(p.cost) : ''}`
+      : p.cost ? `Go out &middot; ${G.money(p.cost)}` : 'Stay a while';
+    const evening = () => {
+      const hadF = s.friends, hadP = !!s.partner;
+      const line = G.goOut(s, p);
+      SND.ping(!hadP && s.partner ? 'met' : s.friends > hadF ? 'friend' : 'spend');
+      done(line, 'good');
+    };
+    acts.push([label, can.ok ? () => s.pref ? evening() : askPref(evening) : close]);
+  }
+  if (p.kind === 'room' && !s.sro && !s.leased)
+    acts.push([`Take the room &middot; ${G.money(G.SRO_MOVE_IN)} up front`,
+               () => { const l = G.takeRoom(s); SND.ping(s.sro ? 'keys' : 'no'); done(l, 'good'); }]);
+  if (p.kind === 'apartment' && !s.leased)
+    acts.push([`Apply for the lease &middot; ${G.money(G.MOVE_IN_COST)}`,
+               () => { const l = G.signLease(s); SND.ping(s.leased ? 'keys' : 'no'); done(l, 'good'); }]);
+  /* Wherever you actually live. This was on the studio alone, so a player
+     who stayed at the Alder — the path the room exists to make possible —
+     was told by the You panel to ask them at their place, walked to their
+     place, and found nothing there to tap. */
+  const home = (p.kind === 'apartment' && s.leased) || (p.kind === 'room' && s.sro);
+  if (home && G.canMoveIn(s))
+    acts.push([`Ask ${esc(s.partner.name)} to move in`,
+      () => { const l = G.moveIn(s); SND.ping(s.movedIn ? 'end' : 'no'); done(l, 'good'); }]);
+  if (home || (p.kind === 'couch' && !G.housed(s)))
+    acts.push(['Sleep', () => {
+      /* Sleeping is where rent is taken and where the couch runs out, and
+         sleep() reports both into the log. Flashing a bare "Morning." threw
+         those away, so the player watched $2,100 leave with no explanation
+         on screen at all — the largest recurring cost in the game, silent. */
+      const before = s.log.length;
+      SND.ping('sleep');
+      G.sleep(s);
+      const fresh = s.log.slice(0, s.log.length - before).reverse();
+      close(); hud(); persist();
+      if (!fresh.length) { flash('Morning.'); return; }
+      fresh.forEach((e, i) => setTimeout(() => flash(e.text, e.kind), i * 850));
+    }]);
+  if (p.id === 'corner' && s.leased && !s.car)
+    acts.push([`Buy the car off the board &middot; ${G.money(G.CAR_COST)}`,
+               () => { const l = G.buyCar(s); SND.ping(s.car ? 'car' : 'no'); done(l, 'good'); }]);
+
+  /* What the card in the window actually says. */
+  let posting = '', blurb = p.blurb;
+
+  /* Somewhere to live says what it is and what it asks, the way a job ad
+     does. "Bathroom down the hall. $1,200 every 30 days" was the whole
+     description of the room — which reads as a price on a hallway, and
+     never said the thing that matters: your own lockable door, month to
+     month, nobody checking your income. The two places are the real choice
+     in the middle of this game and the player could not compare them. */
+  const terms = (what, detail, rent, asks) => `<div class="row">
+      <div><div class="l">${what}</div><div class="d">${detail}</div></div>
+      <div style="text-align:right;line-height:1.15">
+        <div class="pay">${G.money(rent)}</div>
+        <div class="d" style="font-size:11px">a month</div></div></div>
+    <div class="note" style="margin-bottom:12px">${asks}</div>`;
+
+  if (p.kind === 'room') {
+    if (s.sro) blurb = 'Your room. A bed, a sink, and a window onto Turk Street.';
+    posting = terms('One room, shared bathroom',
+      'A bed, a sink, a lock on your door. Kitchen and bathroom on the landing.',
+      G.SRO_RENT,
+      s.sro ? `Month to month. ${G.money(G.SRO_RENT)} is due every 30 days.`
+        : `Month to month — no lease, no employer, no credit check. They want the ` +
+          `first month and the last up front: ${G.money(G.SRO_MOVE_IN)}.`);
+  }
+  /* What an evening here costs and what it is worth, so the three places
+     can be told apart before you walk across town to one of them. */
+  if (p.kind === 'night' && G.socialOpen(s)) {
+    /* Keyed off what it costs, not off the lift value — the lifts get
+       retuned every time the last act is rebalanced and the labels silently
+       stopped telling the three places apart the first time they were. */
+    const pace = !p.cost ? 'Cheap, and slow'
+      : p.cost >= 30 ? 'The big night out' : 'A proper evening';
+    posting = `<div class="row">
+      <div><div class="l">${esc(pace)}</div>
+        <div class="d">${p.opens > 12 ? 'From ' + G.clock(p.opens * 60) + '.' : 'Any time of day.'}
+          ${s.partner ? 'Moves things along ' + (p.lift >= 20 ? 'fast' : p.lift >= 14 ? 'steadily' : 'slowly') + '.'
+            : Math.round(p.meet * 100) + ' nights in a hundred come to something.'}</div></div>
+      <div style="text-align:right;line-height:1.15">
+        <div class="pay">${p.cost ? G.money(p.cost) : 'Free'}</div>
+        <div class="d" style="font-size:11px">an evening</div></div></div>`;
+  }
+  if (p.kind === 'apartment') {
+    if (s.leased) blurb = 'Your place. One room, one window, and the door is yours.';
+    posting = terms('One room, your own bathroom',
+      'Your own kitchen, your own bathroom, your own front door.',
+      G.RENT,
+      s.leased ? `${G.money(G.RENT)} is due every 30 days.`
+        : `A year's lease. They want an employer, ${G.STUBS_NEEDED} recent pay stubs and ` +
+          `${G.INCOME_MULTIPLE}x the rent coming in — plus ${G.money(G.STUDIO_COST)} first and ` +
+          `deposit and ${G.money(G.APP_FEE)} to run your credit.`);
+  }
+  if (p.kind === 'work') {
+    const mine = s.job && s.job.id === p.id;
+    const m = G.matchAt(s, p);
+    /* The card in the window stays in the window until it is your window. */
+    if (mine) blurb = `You work here. ${s.shifts} shift${s.shifts === 1 ? '' : 's'} so far.`;
+    posting = `<div class="row">
+      <div><div class="l">${esc(p.role)}</div>
+        <div class="d">${mine ? 'Your job' : 'They want: ' + m.wants.join(', ')}</div></div>
+      <div style="text-align:right;line-height:1.15">
+        <div class="pay">${G.money(p.pay)}</div>
+        <div class="d" style="font-size:11px">an hour</div></div></div>
+      ${mine ? '' : `<div class="note" style="margin-bottom:12px">${esc(m.verdict)}</div>`}`;
+  }
+
+  if (!acts.length) { flash(`${p.name}. ${p.blurb}`); return; }
+  open(`<h2>${esc(p.name)}</h2><div class="sub">${esc(blurb)}</div>${posting}
+    ${acts.map((a, i) => `<button class="p" style="width:100%;margin-bottom:9px"
+        data-a="${i}">${a[0]}</button>`).join('')}
+    <button id="away" style="width:100%">Walk on</button>`);
+  sheet.querySelectorAll('[data-a]').forEach(b =>
+    b.onclick = () => acts[+b.dataset.a][1]());
+  $('away').onclick = close;
+
+  function done(line, kind='') {
+    if (line) { G.say(s, line, kind); flash(line, kind); }
+    close(); hud(); persist();
+  }
+}
+
+/* ====================================================================
+   LOOP
+   ==================================================================== */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+
+  /* ---- when the clock is held ----
+     Reading is not playing. A panel is modal, so nothing moves behind it; and
+     standing still with the map dragged somewhere else is the player working
+     out where to go. Either way the clock stops, because otherwise looking up
+     your destination is what costs you the delivery — which is exactly how a
+     run was lost while testing.
+
+     Walking with the map panned away still burns time, so panning is not a
+     way to cross the city for free. The street itself keeps moving in both
+     cases: a frozen city behind an open panel reads as a hung page. */
+  const inPanel = sheet.style.display === 'block';
+  const held = inPanel || (cam.free && !me.path.length);
+
+  me.walking = me.path.length > 0 && !inPanel;
+  if (me.path.length && !inPanel) {
+    let move = SPEED * dt;
+    while (move > 0 && me.path.length) {
+      const n = me.path[0];
+      const d = Math.hypot(n.x - me.x, n.y - me.y);
+      /* Face the way you are going. Turning instantly looks like a glitch at
+         a corner, so swing round to the new heading over a few frames — and
+         go the short way round, or they spin 350 degrees to turn left. */
+      if (d > 0.01) {
+        const want = Math.atan2(n.y - me.y, n.x - me.x);
+        let turn = want - me.heading;
+        while (turn > Math.PI) turn -= Math.PI * 2;
+        while (turn < -Math.PI) turn += Math.PI * 2;
+        me.heading += turn * Math.min(1, dt * 11);
+      }
+      if (d <= move) {
+        me.x = n.x; me.y = n.y; move -= d;
+        me.phase = stepPhase(me.phase, d); footfall();
+        me.path.shift();
+        G.walked(s, d);
+        if (!me.path.length) arrived(n.k); else me.at = n.k;
+      } else {
+        me.x += (n.x - me.x) / d * move;
+        me.y += (n.y - me.y) / d * move;
+        me.phase = stepPhase(me.phase, move); footfall();
+        G.walked(s, move);
+        move = 0;
+      }
+    }
+  }
+
+  /* How much city is within earshot. Traffic near you is the whole bed —
+     a back street in the Tenderloin should be quiet and standing on Market
+     should not be, and the vehicles already know where they are. */
+  let near = 0;
+  for (const c of CARS) {
+    const d = Math.hypot(c.x - me.x, c.y - me.y);
+    if (d < 300) near += (1 - d / 300) * (c.kind.id === 'bus' ? 1.7 : 1);
+  }
+  SND.ambience(Math.min(1, near / 7));
+
+  /* The one sound this city has that no other city has. Rung only when you
+     are near the lines that actually carry it. */
+  bellTimer -= dt;
+  if (bellTimer <= 0) {
+    bellTimer = 4 + Math.random() * 7;
+    const onCalifornia = Math.abs(me.y - 380) < 70 && me.x > 200 && me.x < 940;
+    const onHyde = Math.abs(me.x - 560) < 70 && me.y > 120 && me.y < 1040;
+    if ((onCalifornia || onHyde) && Math.random() < 0.45) SND.bell();
+  }
+
+  stepPeds(dt);
+  stepCars(dt);
+  if (!held) G.tick(s, dt);
+
+  /* Once a day, when you start running down and nothing else is in the way. */
+  if (G.hungry(s) && askedFoodOn !== s.day && !s.over &&
+      sheet.style.display !== 'block') {
+    askedFoodOn = s.day;
+    foodCard();
+  }
+
+  document.getElementById('clockchip').classList.toggle('held', held && !s.over);
+  if (s.over) showEnd();
+  if (!cam.free) {
+    cam.x += (me.x - cam.x) * Math.min(1, dt * 4.2);
+    cam.y += (me.y - cam.y) * Math.min(1, dt * 4.2);
+  }
+  $('back').style.display = cam.free ? 'block' : 'none';
+
+  paint(); hud();
+  requestAnimationFrame(frame);
+}
+
+/* ---- faces ----
+   The host is the only reason you have a roof for thirty days, and they were
+   a name in one sentence and nothing else. Drawn rather than photographed,
+   and flat enough to sit beside the rest of the art. */
+const FACES = {
+  dre:    { skin: '#6b4228', hair: '#17110d', top: '#33465c', long: false },
+  amanda: { skin: '#c98f63', hair: '#3a2418', top: '#7a3f3f', long: true  },
+};
+function faceSVG(id, size = 58) {
+  const f = FACES[id];
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true">
+    <circle cx="32" cy="32" r="32" fill="#efece3"/>
+    <path d="M6 64 a26 22 0 0 1 52 0 z" fill="${f.top}"/>
+    <rect x="27" y="37" width="10" height="10" rx="5" fill="${f.skin}"/>
+    ${f.long ? `<rect x="15" y="24" width="7.5" height="23" rx="3.75" fill="${f.hair}"/>
+                <rect x="41.5" y="24" width="7.5" height="23" rx="3.75" fill="${f.hair}"/>` : ''}
+    <circle cx="32" cy="26" r="15" fill="${f.hair}"/>
+    <circle cx="32" cy="29" r="13.2" fill="${f.skin}"/>
+    <circle cx="27" cy="28" r="1.7" fill="#241a14"/>
+    <circle cx="37" cy="28" r="1.7" fill="#241a14"/>
+    <path d="M28.5 34.5 q3.5 2.8 7 0" stroke="#241a14" stroke-width="1.6"
+          fill="none" stroke-linecap="round"/>
+  </svg>`;
+}
+
+/* ---- first run ----
+   This used to be two flashes that faded after four seconds, so the only
+   instruction in the game was gone before a new player had finished looking
+   at the map. A card they dismiss themselves cannot be missed. */
+function arrivalCard() {
+  const h = G.hostOf(s);
+  open(`<h2>You just got here</h2>
+    <div class="sub">You moved to San Francisco for a job you don't have yet.
+      You have ${G.money(s.money)}, and ${h.name} said you could take the couch
+      for a month.</div>
+    <div class="row"><div>
+      <div class="l">What you are working toward</div>
+      <div class="d">Work that covers your own rent — and your own lease,
+        before the couch runs out on day ${G.COUCH_DAYS}.</div></div></div>
+    <div class="row"><div>
+      <div class="l">Deliveries pay today</div>
+      <div class="d">Find work, collect, drop off, get paid. It is what keeps
+        you eating while you look for the real thing.</div></div></div>
+    <div class="row"><div>
+      <div class="l">A job pays the rent</div>
+      <div class="d">Write a resume, hand it in at the green places. A steady
+        wage is the only thing that covers ${G.money(G.RENT)} a month.</div>
+      </div></div>
+    <div class="row"><div>
+      <div class="l">Getting around</div>
+      <div class="d">Tap a street to walk there. Drag the map to look around.</div>
+      </div></div>
+    <div class="note" style="margin-bottom:12px">Everything about your
+      situation lives under <b>You</b>, bottom right${SND.available()
+        ? ' — including the sound, if you would rather have it off' : ''}.</div>
+    <button class="p" style="width:100%" id="go">Start the day</button>`);
+  $('go').onclick = () => { close(); persist(); };
+}
+
+/* Pick whose couch it is before anything else. */
+function hostCard() {
+  open(`<h2>Whose couch?</h2>
+    <div class="sub">Somebody you know from before put you up for a month.</div>
+    <div class="hosts">${G.HOSTS.map(h => `
+      <button class="host" data-h="${h.id}">
+        ${faceSVG(h.id)}<span>${h.name}</span>
+      </button>`).join('')}</div>`);
+  sheet.querySelectorAll('[data-h]').forEach(b => b.onclick = () => {
+    s.host = b.dataset.h;
+    /* The place on the map is named after whoever you picked. */
+    const couchPlace = PLACES.find(p => p.id === 'couch');
+    couchPlace.name = `${G.hostOf(s).name}'s place`;
+    persist();
+    arrivalCard();
+  });
+}
+
+if (!s.log.length) {
+  G.say(s, 'You got in last night.', '');
+  hostCard();
+} else if (s.host) {
+  PLACES.find(p => p.id === 'couch').name = `${G.hostOf(s).name}'s place`;
+}
+setInterval(persist, 5000);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
