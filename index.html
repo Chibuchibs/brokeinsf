@@ -168,11 +168,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261121150736';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121150736';
-import { drawVehicle, BAG } from './traffic.js?v=20261121150736';
-import * as G from './game.js?v=20261121150736';
-import * as SND from './sound.js?v=20261121150736';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261121151121';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121151121';
+import { drawVehicle, BAG } from './traffic.js?v=20261121151121';
+import * as G from './game.js?v=20261121151121';
+import * as SND from './sound.js?v=20261121151121';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -1729,8 +1729,21 @@ $('me').onclick = () => {
           ? `${s.shifts} shifts worked`
           : `${s.shifts} of ${G.STUBS_NEEDED} pay stubs a landlord wants`)]
     : ['No steady job yet', 'Deliveries are paying for now.'];
+  /* "Handed in 2 places today" reads as a pending result — as though you
+     are waiting on a callback. You are not. apply() decides on the spot,
+     and s.applied is wiped every morning in sleep(), so every name in this
+     list is a no you can go back and ask again tomorrow. Neither of those
+     facts was anywhere on screen, which left the player with a number and
+     no idea whether to wait or to walk. */
+  const tried = s.applied.map(id => G.placeName(id));
+  const said = tried.length > 2
+    ? `${tried.slice(0, 2).join(', ')} and ${tried.length - 2} more`
+    : tried.join(' and ');
   const cv = r
-    ? [r.tags.join(', '), `Handed in ${s.applied.length} place${s.applied.length === 1 ? '' : 's'} today.`]
+    ? [r.tags.join(', '),
+       !tried.length ? 'Nobody has seen it yet.'
+       : s.job ? `Handed to ${said} today.`
+       : `No from ${said}. They decide on the spot — ask again tomorrow.`]
     : ['No resume yet', 'Places want one before they will hire you.'];
 
   const row = ([l, d], right = '') => `<div class="row"><div>
