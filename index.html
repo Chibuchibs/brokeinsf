@@ -168,11 +168,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261121151121';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121151121';
-import { drawVehicle, BAG } from './traffic.js?v=20261121151121';
-import * as G from './game.js?v=20261121151121';
-import * as SND from './sound.js?v=20261121151121';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261121151859';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121151859';
+import { drawVehicle, BAG } from './traffic.js?v=20261121151859';
+import * as G from './game.js?v=20261121151859';
+import * as SND from './sound.js?v=20261121151859';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -762,6 +762,28 @@ if (s.me && Number.isFinite(s.me.x) && Number.isFinite(s.me.y)) {
 /* ====================================================================
    RENDER
    ==================================================================== */
+
+/* ---- one source for every pin colour ----
+   The ring colour and the key used to be two separate hardcoded lists, so
+   the legend could quietly start lying about the map. And the colours
+   themselves did not survive contact with a 20px pin: measured in CIELAB,
+   Shop and Landmark were 16.8 apart and Sleep and Landmark 18.3, where
+   anything under about 25 is a coin flip at that size. Re-picked by
+   searching for the set with the largest minimum separation while keeping
+   the two that are load-bearing elsewhere — the hiring green, which is
+   also the accent and the job-hunt halo, and the rust, which is the warn
+   colour and the delivery target. Worst pair is now 31.1. */
+const PINCOL = {
+  work:      ['#1f6f5c', 'Hiring'],
+  food:      ['#b8832a', 'Somewhere to eat'],
+  store:     ['#7b8792', 'Shop'],
+  night:     ['#b03a74', 'Somewhere to go out'],
+  sleep:     ['#3a7cc4', 'Where you sleep'],
+  landmark:  ['#5c4391', 'Landmark'],
+  target:    ['#a8451f', 'Where you are headed'],
+};
+const KEY = Object.values(PINCOL);
+
 const cv = document.getElementById('map'), cx = cv.getContext('2d');
 let VW = 0, VH = 0, DPR = 1, SCALE = 1;
 function resize() {
@@ -1241,13 +1263,10 @@ function paint() {
     const x = W(p.at[0]), y = H(p.at[1]);
     if (x < -70 || y < -70 || x > VW+70 || y > VH+70) continue;
     const target = run && ((!run.picked && run.from === p.id) || (run.picked && run.to === p.id));
-    const col = target ? '#a8451f'
-      : p.kind === 'work' ? '#1f6f5c'
-      : p.kind === 'food' ? '#b8832a'
-      : p.kind === 'couch' || p.kind === 'apartment' || p.kind === 'room' ? '#3b5d8f'
-      : p.kind === 'landmark' ? '#7a6a92'
-      : p.kind === 'night' ? '#9c4f6a'          // a bar is not a laundromat
-      : '#6a6a78';
+    const col = (target ? PINCOL.target
+      : p.kind === 'couch' || p.kind === 'apartment' || p.kind === 'room'
+        ? PINCOL.sleep
+      : PINCOL[p.kind] || PINCOL.store)[0];
     /* A chip with the place's own emoji in it. A coloured dot could only ever
        say which CATEGORY something was, and only once you had found the key;
        the icon says what the place actually is at a glance. The ring keeps
@@ -1700,15 +1719,6 @@ $('act').onclick = () => {
    resume, where you had handed it in, how many nights of couch were left.
    The map key lives down here too, because five colours were each doing real
    work on the map and the game never said what any of them meant. */
-const KEY = [
-  ['#1f6f5c', 'Hiring'],
-  ['#b8832a', 'Somewhere to eat'],
-  ['#6a6a78', 'Shop'],
-  ['#9c4f6a', 'Somewhere to go out'],
-  ['#3b5d8f', 'Where you sleep'],
-  ['#7a6a92', 'Landmark'],
-  ['#a8451f', 'Where you are headed'],
-];
 
 $('me').onclick = () => {
   const r = s.resume;
