@@ -168,11 +168,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261121144800';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121144800';
-import { drawVehicle, BAG } from './traffic.js?v=20261121144800';
-import * as G from './game.js?v=20261121144800';
-import * as SND from './sound.js?v=20261121144800';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261121145021';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121145021';
+import { drawVehicle, BAG } from './traffic.js?v=20261121145021';
+import * as G from './game.js?v=20261121145021';
+import * as SND from './sound.js?v=20261121145021';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -1516,6 +1516,15 @@ function stepPlayer(d) {
 }
 
 addEventListener('keydown', e => {
+  /* Never take a keystroke off a field. WASD walks the player and this
+     handler calls preventDefault() on it, so every w, a, s and d typed
+     into the name box or the resume box was silently eaten — you could not
+     write "Damian", and pasting a real resume dropped a letter in four.
+     Anything with a cursor in it gets the key first. */
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+            t.isContentEditable)) return;
+
   /* Arrows pan the map. WASD walks. Both wanted a keyboard, and one set of
      keys cannot do both without the map lurching every time you take a step. */
   const pan = { ArrowUp:[0,-1], ArrowDown:[0,1],
