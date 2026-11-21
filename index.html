@@ -168,11 +168,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261121145021';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121145021';
-import { drawVehicle, BAG } from './traffic.js?v=20261121145021';
-import * as G from './game.js?v=20261121145021';
-import * as SND from './sound.js?v=20261121145021';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261121150210';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121150210';
+import { drawVehicle, BAG } from './traffic.js?v=20261121150210';
+import * as G from './game.js?v=20261121150210';
+import * as SND from './sound.js?v=20261121150210';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -1360,7 +1360,19 @@ function paint() {
     /* Half-way out from the centre line is the middle of the near lane.
        Scooters filter nearer the kerb, which is where they really ride. */
     const lane = half * (c.kind.id === 'scoot' ? 0.78 : 0.5);
-    const ox = -Math.sin(c.heading) * lane, oy = Math.cos(c.heading) * lane;
+    /* Offset from the direction of the ROAD, not from the car's heading.
+       Positions are always exactly on the centre line — measured, 5,040
+       samples, none off it — but the heading eases round a corner over
+       several frames, so for that moment the lane offset pointed diagonally
+       and carried the drawn car out over the pavement and into the corner
+       of a block. The road does not turn gradually; only the car does. */
+    let dirx = Math.cos(c.heading), diry = Math.sin(c.heading);
+    if (c.to) {
+      const ddx = c.to.x - c.x, ddy = c.to.y - c.y;
+      const dl = Math.hypot(ddx, ddy);
+      if (dl > 0.5) { dirx = ddx / dl; diry = ddy / dl; }
+    }
+    const ox = -diry * lane, oy = dirx * lane;
     const x = W(c.x + ox), y = H(c.y + oy);
     if (x < -60 || y < -60 || x > VW + 60 || y > VH + 60) continue;
     drawVehicle(cx, { x, y, heading: c.heading, scale: carS,
