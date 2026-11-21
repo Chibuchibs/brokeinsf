@@ -9,7 +9,7 @@
    that cost you are city things — a Waymo stopped dead in the crosswalk, a
    wallet left on a counter, fog, a bus that never comes, the rent itself. */
 
-import { PLACES } from './city.js?v=20261121141823';
+import { PLACES } from './city.js?v=20261121143944';
 
 export const DAY_START = 7 * 60;          // 07:00, in minutes
 export const DAY_END   = 23 * 60;         // 23:00 — the day ends whether you like it or not
