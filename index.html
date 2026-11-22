@@ -71,25 +71,6 @@
     padding:8px 11px;box-shadow:0 2px 10px rgba(0,0,0,.09);z-index:5}
   #goal{cursor:pointer}
 
-  /* ---- the key, out in the margin ----
-     It lived at the bottom of the You panel, which meant the one thing that
-     explains the map was two taps away and most players never saw it. On a
-     wide window the city does not fill the screen, so there is room beside
-     it doing nothing. Pinned to the SCREEN rather than drawn into the world:
-     the world's own margin only exists while you are standing at the edge of
-     it, and on a phone there is no margin at all — which is why this hides
-     itself below 1000px rather than stealing width the map needs. */
-  #legend{position:fixed;left:12px;top:50%;transform:translateY(-50%);
-    width:168px;background:var(--card);border:1px solid var(--line);
-    border-radius:11px;padding:11px 12px;z-index:4;
-    box-shadow:0 2px 10px rgba(0,0,0,.07);font-size:12px;line-height:1.45}
-  #legend h4{margin:0 0 7px;font-size:12px;letter-spacing:.02em}
-  #legend .k{display:flex;align-items:center;gap:7px;margin-bottom:3px;
-    color:var(--ink)}
-  #legend .k i{width:9px;height:9px;border-radius:50%;flex:0 0 9px}
-  #legend .how{margin-top:9px;padding-top:8px;border-top:1px solid var(--line);
-    color:var(--muted);font-size:11.5px}
-  @media (max-width: 1000px){ #legend{display:none} }
   #goal:active{background:#f3f0e8}
   #goal .now{font-weight:650}
   #goal .next{color:var(--muted);font-size:13px;padding-right:14px;
@@ -167,7 +148,6 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
     <div id="ebar"><div id="efill"></div></div></div>
 </div>
 
-<aside id="legend" aria-label="Map key"></aside>
 <div id="goal">
   <div class="now" id="rung">Sleeping on the couch</div>
   <div class="next" id="rgoal">Make your first $100</div>
@@ -189,11 +169,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261121152427';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261121152427';
-import { drawVehicle, BAG } from './traffic.js?v=20261121152427';
-import * as G from './game.js?v=20261121152427';
-import * as SND from './sound.js?v=20261121152427';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261122124748';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261122124748';
+import { drawVehicle, BAG } from './traffic.js?v=20261122124748';
+import * as G from './game.js?v=20261122124748';
+import * as SND from './sound.js?v=20261122124748';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -380,6 +360,10 @@ const PARKS = [
    a laundromat — the point of a landmark is that you can see it from the
    next block without reading a label, so each one owns a plot that the
    block generator builds around and the bake draws by hand. */
+/* The strip the map's own key is printed in. Reserved like any other plot
+   so the yard-tree scatter does not grow a fig through the middle of it. */
+const LEGEND = { x: 20, y: 1338, w: 216, h: 92 };
+
 const PLOTS = [
   { kind: 'coit',    x: 912, y: 134, w: 68, h: 50 },
   { kind: 'pyramid', x: 916, y: 316, w: 52, h: 48 },
@@ -391,7 +375,8 @@ const hit = (k, x, y, pad) =>
   x > k.x - pad && x < k.x + k.w + pad && y > k.y - pad && y < k.y + k.h + pad;
 const inPark = (x, y, pad = 0) => PARKS.some(k => hit(k, x, y, pad));
 const reserved = (x, y, pad = 0) =>
-  inPark(x, y, pad) || PLOTS.some(k => hit(k, x, y, pad));
+  inPark(x, y, pad) || hit(LEGEND, x, y, pad) ||
+  PLOTS.some(k => hit(k, x, y, pad));
 
 /* Lot sizes by where you are standing. South of Market is deep and wide —
    warehouses, the Depot, loading bays. The Tenderloin is narrow frontage and
@@ -804,16 +789,6 @@ const PINCOL = {
   target:    ['#a8451f', 'Where you are headed'],
 };
 const KEY = Object.values(PINCOL);
-
-/* Filled once from the same table the pins are drawn from, so the margin
-   key and the map can never disagree. */
-{
-  const el = document.getElementById('legend');
-  if (el) el.innerHTML = '<h4>The map</h4>' +
-    KEY.map(([c, t]) => `<div class="k"><i style="background:${c}"></i>${t}</div>`).join('') +
-    '<div class="how">Tap a street to walk there. Drag the map, or use the ' +
-    'arrow keys, to look around.</div>';
-}
 
 const cv = document.getElementById('map'), cx = cv.getContext('2d');
 let VW = 0, VH = 0, DPR = 1, SCALE = 1;
@@ -1259,6 +1234,43 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
     b.beginPath(); b.arc(t.x, t.y, t.r, 0, 7); b.stroke();
     b.fillStyle = 'rgba(255,255,230,.26)';
     b.beginPath(); b.arc(t.x - t.r * .3, t.y - t.r * .32, t.r * .42, 0, 7); b.fill();
+  }
+
+  /* ---- the key, printed in the margin ----
+     Drawn into the map itself rather than floated over it as a UI card,
+     the way a paper map carries its legend below the frame. It scrolls and
+     scales with the city because it IS part of the city, and it costs
+     nothing per frame — it is in the same baked bitmap as the streets. */
+  {
+    const L = LEGEND;
+    b.fillStyle = 'rgba(70,64,50,.14)';
+    b.fillRect(L.x + 2, L.y + 2.5, L.w, L.h);
+    b.fillStyle = '#f6f3e9';
+    b.fillRect(L.x, L.y, L.w, L.h);
+    b.strokeStyle = 'rgba(70,64,52,.42)'; b.lineWidth = 0.9;
+    b.strokeRect(L.x + .45, L.y + .45, L.w - .9, L.h - .9);
+
+    b.textAlign = 'left'; b.textBaseline = 'middle';
+    b.font = '600 8.5px ui-sans-serif,system-ui,sans-serif';
+    b.fillStyle = '#20202a';
+    b.fillText('THE MAP', L.x + 10, L.y + 12);
+
+    b.font = '7.4px ui-sans-serif,system-ui,sans-serif';
+    KEY.forEach(([c, t], i) => {
+      const yy = L.y + 26 + i * 8.9;
+      b.fillStyle = c;
+      b.beginPath(); b.arc(L.x + 13, yy, 2.9, 0, 7); b.fill();
+      b.fillStyle = '#3a3a46';
+      b.fillText(t, L.x + 20, yy + 0.3);
+    });
+
+    b.strokeStyle = 'rgba(70,64,52,.26)'; b.lineWidth = 0.7;
+    b.beginPath(); b.moveTo(L.x + 10, L.y + 90 - 14);
+    b.lineTo(L.x + L.w - 10, L.y + 90 - 14); b.stroke();
+    b.font = '6.6px ui-sans-serif,system-ui,sans-serif';
+    b.fillStyle = 'rgba(60,56,48,.75)';
+    b.fillText('Tap a street to walk there. Drag the map, or', L.x + 10, L.y + 82);
+    b.fillText('use the arrow keys, to look around.', L.x + 10, L.y + 89);
   }
 
   b.font = '8px ui-sans-serif,system-ui,sans-serif';

@@ -8,7 +8,11 @@
    eight switchbacks. Get those wrong and the map stops being San Francisco. */
 
 /* World is 1040 x 1340. North is up. */
-export const WORLD = { w: 1040, h: 1340 };
+/* The extra ninety pixels at the bottom are not city — they are the margin
+   the map's own key is printed in, the way a paper map carries its legend
+   below the frame. Nothing is built down there: no street reaches it and
+   the block generator only ever lays buildings against a street. */
+export const WORLD = { w: 1040, h: 1435 };
 
 /* A switchback block, drawn the way it looks from above: the road leaves the
    straight line, crosses it, and crosses back, eight times in one block. */
