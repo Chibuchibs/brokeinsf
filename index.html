@@ -169,11 +169,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261127092854';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261127092854';
-import { drawVehicle, BAG } from './traffic.js?v=20261127092854';
-import * as G from './game.js?v=20261127092854';
-import * as SND from './sound.js?v=20261127092854';
+import { WORLD, STREETS, PLACES, HILLS } from './city.js?v=20261127111148';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261127111148';
+import { drawVehicle, BAG } from './traffic.js?v=20261127111148';
+import * as G from './game.js?v=20261127111148';
+import * as SND from './sound.js?v=20261127111148';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -223,6 +223,10 @@ for (let i = 0; i < segs.length; i++)
    centre line. Keyed by the node pair, recorded while the graph is built —
    it is the only point where we still know which street a stretch came from. */
 const ROADW = { arterial: 30, street: 19, crooked: 15 };
+/* Steep enough that the pavement would really be steps. Real San Francisco
+   tops out a little over 30%; anything past about an eighth is a hill you
+   notice in your legs. */
+const STEEP = 0.125;
 const edgeHalf = new Map();
 const ekey = (a, b) => a.k < b.k ? a.k + '|' + b.k : b.k + '|' + a.k;
 function halfOf(aK, bK) {
@@ -573,6 +577,26 @@ for (const k of PARKS)
     TREES.push({ x: k.x + 6 + rnd() * (k.w - 12),
                  y: k.y + 6 + rnd() * (k.h - 12),
                  r: 4 + rnd() * 2.6, tone: rnd() });
+
+/* ====================================================================
+   THE GROUND ITSELF
+
+   Height at any point, as the sum of the hills in city.js. A smooth bump
+   each, so the slopes are continuous and the shading has no seams in it.
+   ==================================================================== */
+function elev(x, y) {
+  let e = 0;
+  for (const k of HILLS) {
+    const dx = x - k.x, dy = y - k.y;
+    e += k.h * Math.exp(-2 * (dx * dx + dy * dy) / (k.r * k.r));
+  }
+  return e;
+}
+/* Rise over run between two points, which is what "steep" means. */
+function grade(ax, ay, bx, by) {
+  const run = Math.hypot(bx - ax, by - ay) || 1;
+  return (elev(bx, by) - elev(ax, ay)) / run;
+}
 
 /* ====================================================================
    THE STREET'S OWN PEOPLE
@@ -1075,7 +1099,7 @@ function stepCars(dt) {
    that moves on its own and therefore the only part that cannot be checked
    by reading it. Costs one property on window and nothing per frame. */
 window.__sf = { CARS, PEDS, segs, STREETS, ROADW, nodes, halfOf, KINDS: BAG,
-                stepCars, JUNCTION, EDGES, REENTRY, lanePos };
+                stepCars, JUNCTION, EDGES, REENTRY, lanePos, elev, grade, HILLS };
 
 /* ====================================================================
    STATE
@@ -1323,30 +1347,6 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
     }
   }
 
-  /* ---- cable car tracks ----
-     Two rails down Hyde, Mason and California, which are the three streets on
-     this map that really carry them: Powell-Hyde and Powell-Mason run the one,
-     the California line runs the other. Nothing else in any American city has
-     these, and from above they are the whole signature — a pair of thin bright
-     lines down the middle of a hill street, with the slot between them. */
-  for (const st of STREETS) {
-    if (st.name !== 'Hyde St' && st.name !== 'Mason St' && st.name !== 'California St') continue;
-    for (const off of [-2.4, 2.4]) {
-      b.strokeStyle = 'rgba(84,78,66,.5)'; b.lineWidth = 1.5;
-      b.beginPath();
-      st.pts.forEach((pt, i) => {
-        const nxt = st.pts[i + 1] || st.pts[i - 1];
-        const dx = nxt[0] - pt[0], dy = nxt[1] - pt[1], m = Math.hypot(dx, dy) || 1;
-        const x = pt[0] - dy / m * off, y = pt[1] + dx / m * off;
-        i ? b.lineTo(x, y) : b.moveTo(x, y);
-      });
-      b.stroke();
-    }
-    /* The slot the grip runs in, darker and dead centre. */
-    b.strokeStyle = 'rgba(70,64,54,.3)'; b.lineWidth = 0.8;
-    trace(st); b.stroke();
-  }
-
   /* ---- stop bars and red kerbs ----
      The thick white bar a car stops at, and the painted kerb either side of
      every corner where nobody may park. Both are things you only notice when
@@ -1394,6 +1394,39 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
           const y1 = c[1] + uy * (cross + 16) * dir + ny * side * k;
           b.beginPath(); b.moveTo(x0, y0); b.lineTo(x1, y1); b.stroke();
         }
+      }
+    }
+  }
+
+  /* ---- stepped pavements ----
+     On the steepest blocks the pavement in this city is not a slope, it is
+     a flight of concrete steps, and from above that is a ladder of fine
+     lines running up the kerb. It is the detail that says "this is a hill"
+     without drawing a single contour, and it only appears where the ground
+     is genuinely steep enough to warrant it. */
+  for (const sg of segs) {
+    const [ax, ay] = sg.a, [bx, by] = sg.b;
+    /* Tested stretch by stretch, never end to end. Checking the whole
+       segment first looks like a cheap way to skip the flat streets and is
+       wrong: a street that climbs a hill and comes down the far side nets
+       out at nothing. Measured, that left Jackson — the steepest road on
+       this map at 26.5% — with no steps at all, while Lombard got all of
+       them. */
+    const half = (ROADW[STREETS[sg.si].kind] || 19) / 2;
+    const L = Math.hypot(bx - ax, by - ay) || 1;
+    const ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy, ny = ux;
+    b.strokeStyle = 'rgba(108,100,84,.4)'; b.lineWidth = 0.7;
+    for (let t = 6; t < L - 6; t += 5) {
+      const cx = ax + ux * t, cy = ay + uy * t;
+      /* Only where this stretch really is steep — a long street can climb
+         a hill at one end and be flat at the other. */
+      if (Math.abs(grade(cx - ux * 3, cy - uy * 3, cx + ux * 3, cy + uy * 3)) < STEEP) continue;
+      for (const side of [1, -1]) {
+        const i0 = half + 1.4, i1 = half + 4.6;
+        b.beginPath();
+        b.moveTo(cx + nx * side * i0, cy + ny * side * i0);
+        b.lineTo(cx + nx * side * i1, cy + ny * side * i1);
+        b.stroke();
       }
     }
   }
@@ -1669,7 +1702,10 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
      them — they are a pair of lines that tell you which hill you are on. */
   b.strokeStyle = 'rgba(96,90,74,.34)'; b.lineWidth = 0.8;
   for (const st of STREETS) {
-    if (st.name !== 'California St' && st.name !== 'Hyde St') continue;
+    /* California and Hyde were here already; Mason is the third, and the
+       Powell-Mason line is as real as the other two. */
+    if (st.name !== 'California St' && st.name !== 'Hyde St'
+        && st.name !== 'Mason St') continue;
     for (const off of [-1.9, 1.9]) {
       b.beginPath();
       st.pts.forEach((pt, i) => {
@@ -1696,6 +1732,118 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
     b.beginPath(); b.arc(t.x, t.y, t.r, 0, 7); b.stroke();
     b.fillStyle = 'rgba(255,255,230,.26)';
     b.beginPath(); b.arc(t.x - t.r * .3, t.y - t.r * .32, t.r * .42, 0, 7); b.fill();
+  }
+
+  /* ---- the hills ----
+     The shape of the ground, in two layers that do different jobs.
+
+     Shading alone was tried first and does not work here. The hills are
+     broad and smooth, so the shading is a very low-frequency gradient; weak
+     enough to be tasteful it is invisible, and strong enough to see it
+     reads as a stain on the map rather than as ground. Contour lines carry
+     the information — this map already has printed street names and a key
+     in the margin, so it is allowed to be a map — and a gentle wash of
+     light and shade underneath gives them depth. Judged by rendering the
+     three options side by side over the real city, not by reasoning.
+
+     Light comes from the north-west, the SAME north-west that every
+     building shadow on this map already falls away from. Lighting the
+     terrain from one side and the buildings from the other is the one
+     mistake here that would make the whole thing look like a collage.
+
+     Both go over everything, buildings and trees included, because that is
+     what ground does: a block on a dark slope is a dark block. */
+  {
+    const SH = 4;                                  // world px per sample
+    const gw = Math.ceil(WORLD.w / SH) + 1, gh = Math.ceil(WORLD.h / SH) + 1;
+    /* One elevation lookup per grid point, reused by the shading and the
+       contours both. Sampling the field separately for each cost five
+       exponentials a pixel and would have put the bake well past its
+       budget — it runs once, but it runs while somebody is waiting. */
+    const E = new Float32Array(gw * gh);
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < gh; j++)
+      for (let i = 0; i < gw; i++) {
+        const e = elev(i * SH, j * SH);
+        E[j * gw + i] = e;
+        if (e < lo) lo = e;
+        if (e > hi) hi = e;
+      }
+
+    /* ---- the wash ---- */
+    const sc = document.createElement('canvas');
+    sc.width = gw; sc.height = gh;
+    const sctx = sc.getContext('2d');
+    const img = sctx.createImageData(gw, gh);
+    const Lx = -0.54, Ly = -0.54, Lz = 0.65;       // north-west, ~40 degrees up
+    const GAIN = 3.5, MAX = 0.32;
+    const at = (i, j) => E[Math.max(0, Math.min(gh - 1, j)) * gw
+                         + Math.max(0, Math.min(gw - 1, i))];
+    for (let j = 0; j < gh; j++) {
+      for (let i = 0; i < gw; i++) {
+        const ex = (at(i + 1, j) - at(i - 1, j)) / (2 * SH);
+        const ey = (at(i, j + 1) - at(i, j - 1)) / (2 * SH);
+        const nl = Math.hypot(ex, ey, 1);
+        let d = ((-ex * Lx - ey * Ly + Lz) / nl - Lz) * GAIN;
+        if (d > 1) d = 1; else if (d < -1) d = -1;
+        const q = (j * gw + i) * 4;
+        if (d >= 0) {
+          img.data[q] = 255; img.data[q+1] = 251; img.data[q+2] = 236;
+          img.data[q+3] = d * MAX * 255;
+        } else {
+          img.data[q] = 58; img.data[q+1] = 52; img.data[q+2] = 40;
+          img.data[q+3] = -d * MAX * 255;
+        }
+      }
+    }
+    sctx.putImageData(img, 0, 0);
+    b.save();
+    b.imageSmoothingEnabled = true;
+    b.imageSmoothingQuality = 'high';
+    b.drawImage(sc, 0, 0, WORLD.w, WORLD.h);
+    b.restore();
+
+    /* ---- the contours ----
+       Marching squares over the same grid, so they come out as real lines
+       rather than as a band of pixels that goes soft the moment it is
+       scaled up. Every fourth one heavier, the way a printed map does it,
+       because a stack of identical lines tells you there is a slope but not
+       how far up you are. */
+    const INT = 8;                                  // ~16 metres a line
+    const lerp = (a, z, t) => a + (z - a) * t;
+    for (let L = Math.ceil(lo / INT) * INT; L <= hi; L += INT) {
+      const major = Math.round(L / INT) % 4 === 0;
+      b.strokeStyle = major ? 'rgba(96,86,68,.34)' : 'rgba(96,86,68,.22)';
+      b.lineWidth = major ? 0.85 : 0.55;
+      b.beginPath();
+      for (let j = 0; j < gh - 1; j++) {
+        for (let i = 0; i < gw - 1; i++) {
+          const v0 = E[j*gw+i], v1 = E[j*gw+i+1],
+                v2 = E[(j+1)*gw+i+1], v3 = E[(j+1)*gw+i];
+          const c = (v0 > L ? 1 : 0) | (v1 > L ? 2 : 0)
+                  | (v2 > L ? 4 : 0) | (v3 > L ? 8 : 0);
+          if (c === 0 || c === 15) continue;
+          const x0 = i * SH, y0 = j * SH, x1 = x0 + SH, y1 = y0 + SH;
+          const top    = () => [lerp(x0, x1, (L-v0)/(v1-v0)), y0];
+          const right  = () => [x1, lerp(y0, y1, (L-v1)/(v2-v1))];
+          const bottom = () => [lerp(x0, x1, (L-v3)/(v2-v3)), y1];
+          const left   = () => [x0, lerp(y0, y1, (L-v0)/(v3-v0))];
+          let pair;
+          switch (c) {
+            case 1: case 14: pair = [[left(), top()]]; break;
+            case 2: case 13: pair = [[top(), right()]]; break;
+            case 3: case 12: pair = [[left(), right()]]; break;
+            case 4: case 11: pair = [[right(), bottom()]]; break;
+            case 6: case 9:  pair = [[top(), bottom()]]; break;
+            case 7: case 8:  pair = [[left(), bottom()]]; break;
+            case 5:  pair = [[left(), top()], [right(), bottom()]]; break;
+            case 10: pair = [[top(), right()], [left(), bottom()]]; break;
+          }
+          for (const [p, q] of pair) { b.moveTo(p[0], p[1]); b.lineTo(q[0], q[1]); }
+        }
+      }
+      b.stroke();
+    }
   }
 
   /* ---- the key, printed in the margin ----
@@ -1749,6 +1897,8 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
     b.restore();
   }
 })();
+window.__sf.bake = bake;
+window.__sf.Q = Q;
 
 function paint() {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);

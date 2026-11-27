@@ -91,6 +91,42 @@ export const STREETS = [
    Each sits at a point on the map; the door is the nearest walkable spot, so
    a place is reached by standing on the street outside it, never by entering
    a separate screen. Nothing in this game takes the player off the street. */
+/* ---------------------------------------------------------------------
+   THE HILLS
+
+   San Francisco is hills before it is anything else, and a flat map of it
+   is a map of somewhere else. These are the three that this rectangle
+   actually covers, each a smooth rise with a summit where the real one is:
+
+     - Russian Hill, over Hyde around Lombard and Vallejo
+     - Nob Hill, whose top is California and Taylor
+     - the eastern shoulder of Pacific Heights, up by Franklin and Broadway
+
+   Everything south of them falls away to the flat: the Tenderloin is
+   lowland, and Market, Mission and the Civic Center are flatter still.
+   That is not a simplification, it is the actual shape of the place, and
+   it is why the walk from Market up to California is the walk it is.
+
+   `h` is in the same units as x and y. The map is about 1040px across for
+   roughly two kilometres of city, so a pixel is about two metres and a
+   hundred-metre hill stands about fifty. Getting that ratio right is what
+   makes the gradients come out at real San Francisco steepness — a little
+   over 20% on the worst blocks — rather than at the cartoon 50% you get by
+   picking heights that look like big numbers. */
+export const HILLS = [
+  { name: 'Russian Hill',    x: 545, y: 165, h: 47, r: 225 },
+  { name: 'Nob Hill',        x: 880, y: 395, h: 52, r: 235 },
+  { name: 'Pacific Heights', x:  95, y: 250, h: 36, r: 205 },
+  /* Cathedral Hill, the lesser rise over Geary at Van Ness. */
+  { name: 'Cathedral Hill',  x: 215, y: 615, h: 21, r: 150 },
+  /* Polk Gulch is not a figure of speech. It is the trough that runs down
+     Polk between Russian Hill and Pacific Heights, and a negative bump is
+     exactly what it is. Three smooth domes on their own read as three
+     smooth domes; it is the saddles and hollows between them that make a
+     shaded map look like ground instead of like blobs. */
+  { name: 'Polk Gulch',      x: 325, y: 335, h: -15, r: 145 },
+];
+
 export const PLACES = [
   { id: 'couch', icon: '🛋️', kind: 'couch', name: "Dre's apartment",
     at: [705, 845], blurb: "Your friend's couch. Two weeks, he said." },
