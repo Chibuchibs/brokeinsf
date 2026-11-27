@@ -169,11 +169,11 @@ stroke-linejoin='round'/></svg>") right center no-repeat}
 <div id="sheet"></div>
 
 <script type="module">
-import { WORLD, STREETS, PLACES } from './city.js?v=20261122124748';
-import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261122124748';
-import { drawVehicle, BAG } from './traffic.js?v=20261122124748';
-import * as G from './game.js?v=20261122124748';
-import * as SND from './sound.js?v=20261122124748';
+import { WORLD, STREETS, PLACES } from './city.js?v=20261127092854';
+import { drawWalker, stepPhase, LOOKS } from './walker.js?v=20261127092854';
+import { drawVehicle, BAG } from './traffic.js?v=20261127092854';
+import * as G from './game.js?v=20261127092854';
+import * as SND from './sound.js?v=20261127092854';
 
 /* ====================================================================
    THE WALK GRAPH
@@ -663,16 +663,167 @@ function stepPeds(dt) {
    thing on this map and the setback text already promises it.
    ==================================================================== */
 const CARS = [];
-for (let i = 0; i < 42; i++) {
-  const n = NODES[Math.floor(Math.random() * NODES.length)];
+/* Junction nodes: the ones where more than two stretches meet. Traffic has to
+   take turns at these, and nowhere else. */
+const JUNCTION = new Set();
+for (const n of nodes.values()) if (n.to.size > 2) JUNCTION.add(n.k);
+
+/* Where a street simply stops, at the edge of the map. Traffic used to reach
+   one of these, find its only option was the way it had come, and turn round
+   on the spot — and once cars queued behind each other, that became a knot of
+   them shuffling back and forth at the kerb. Measured: cars parked at a
+   terminus were 38% of all the samples where a body lay over the pavement,
+   and the nose of the first one in the queue hung 1.9px past the end of the
+   road. A city does not end at the edge of what you can see. Traffic leaves
+   and other traffic arrives, so a car that reaches the edge is sent back in
+   at another one, out of sight of the player. */
+const EDGES = [...nodes.values()].filter(n => n.to.size === 1);
+/* Where a car may be put back on. Not just the 37 street ends — any quiet
+   mid-block stretch will do, because the player cannot see it happen and
+   there are hundreds of them, so a car coming back never has to squeeze in
+   behind one that arrived a moment earlier. */
+const REENTRY = [...nodes.values()].filter(n => n.to.size === 2);
+
+/* Half a lane of 15 or more means an arterial — Market, Van Ness, Geary. The
+   buses stay on them, which is both what Muni actually does and the fix for
+   the one vehicle long enough to lie across a pavement when it turns. */
+const isBig = (aK, bK) => halfOf(aK, bK) >= 14;
+
+/* There was a junction reservation scheme here: each junction granted a claim
+   to one axis at a time, cars going the same way joined it, crossing cars
+   waited, and the claim timed out so the queue drained. It modelled a traffic
+   light out of a counter and it was the wrong idea twice over.
+
+   It could not do what it was for. A permission to ENTER cannot keep two
+   bodies apart, because a car can come to rest anywhere once it is inside;
+   measured, 1,635 of the 1,647 frames where two cars genuinely overlapped on
+   screen were inside a junction. And it could not be made safe without
+   seizing: tightening it to a veto stopped 98.6% of the traffic dead at a
+   mean speed of 0.7, loosening it let cars drive through each other again,
+   and in between the city oscillated between flowing and total gridlock —
+   5% stopped, then 98%, then 60%, then 98% — with individual cars stuck for
+   over four minutes. Cars had to be cut to sixteen before it ran at all, and
+   with the same sixteen cars and the scheme simply switched OFF the map ran
+   clean: 13% stopped against 51%, mean speed 47 against 24.
+
+   So nothing here negotiates any more. Safety is a corridor check that every
+   car does for itself, and courtesy at a crossing is a wait with a hard cap
+   on it, which cannot deadlock however the traffic falls. */
+const SAFE = 7;                    // the gap left at a standstill
+const ACCEL = 46, BRAKE = 175;     // px/s^2
+const STOPLINE = 12;               // how far short of the middle you stop
+
+/* Thirty, not the forty-two it used to be. Forty-two was chosen when cars
+   drove through each other and through the junctions, where the number costs
+   nothing. Once they have to queue and give each other room it is well over
+   what this street network carries: measured over four independent four-minute
+   runs each, 42 cars sat 71% stopped at a mean speed of 13, while 30 ran at
+   14% stopped and a mean speed of 45. The cliff is somewhere just above
+   thirty, so thirty is where this sits. */
+for (let i = 0; i < 30; i++) {
   const kind = BAG[Math.floor(Math.random() * BAG.length)];
+  /* Start on a real stretch of road, pointed along it, rather than on a node
+     with no heading and no target — which used to leave a car spinning on the
+     spot for its first frames while it worked out where it was. */
+  let n = null, nb = null, tries = 0;
+  while (tries++ < 400) {
+    const cand = NODES[Math.floor(Math.random() * NODES.length)];
+    const opts = [...cand.to].filter(k => !kind.bus || isBig(cand.k, k));
+    if (!opts.length) continue;
+    /* With room. Forty-two cars dropped on random nodes with no clearance
+       check started the map with a pair already overlapping, and a pair that
+       starts overlapping never recovers on its own. */
+    if (CARS.some(o => Math.hypot(o.x - cand.x, o.y - cand.y) < 30)) continue;
+    n = cand; nb = nodes.get(opts[Math.floor(Math.random() * opts.length)]);
+    if (nb) break;
+  }
+  if (!n || !nb) { n = NODES[0]; nb = nodes.get([...n.to][0]); }
+  const sp = kind.speed[0] + Math.random() * (kind.speed[1] - kind.speed[0]);
   CARS.push({
-    x: n.x, y: n.y, at: n.k, to: null,
-    heading: Math.random() * Math.PI * 2,
+    x: n.x, y: n.y, at: n.k, to: nb,
+    heading: Math.atan2(nb.y - n.y, nb.x - n.x),
     kind,
-    speed: kind.speed[0] + Math.random() * (kind.speed[1] - kind.speed[0]),
+    vmax: sp,
+    v: sp * (0.5 + Math.random() * 0.5),
     frozen: 0,
+    px: n.x, py: n.y,              // where it is drawn, kept by stepCars
+    /* Fixed, and different for every car, purely to settle standoffs. Two
+       cars nose to nose across a junction will both wait for the other for
+       ever unless something decides between them, and it has to be something
+       that does not change from frame to frame or they will both keep
+       deferring. */
+    rank: Math.random(),
+    stuck: 0,                      // how long it has been going nowhere
+    braking: false,
   });
+}
+
+/* Put a car back on the map somewhere the player cannot see it, pointed
+   inwards. Keeps the number of vehicles constant without anyone watching one
+   appear out of nothing. */
+function reenter(c) {
+  /* Every candidate street end that is far enough away that nobody watching
+     will see a car appear. Picking the FARTHEST one, which was the first
+     thing I tried, meant picking the SAME one almost every time — the player
+     starts at a fixed couch, so the furthest corner of the map is a constant.
+     Measured: 478 of 494 overlapping pairs were two cars on one edge, and
+     every example was the same node, cars landing on top of each other as
+     they came back in. Pick at random among the ones out of sight, and only
+     take a spot with road clear behind it. */
+  const cand = [];
+  for (const n of REENTRY) {
+    /* Off screen, which is a rectangle round the player and not a circle:
+       the view is about 480 by 440 world px, so this is that with a margin. */
+    if (Math.abs(n.x - me.x) < 300 && Math.abs(n.y - me.y) < 280) continue;
+    for (const k of n.to) {
+      const nb = nodes.get(k);
+      if (!nb) continue;
+      if (c.kind.bus && !isBig(n.k, k)) continue;
+      cand.push([n, nb]);
+      break;
+    }
+  }
+  /* Go where the traffic is thinnest, not merely where there is a gap.
+
+     This used to take the first candidate with 34px of clear road, which
+     sounds even-handed and is not: a car is only ever put back somewhere the
+     player cannot see, "away from the player" is a direction as much as a
+     distance, and on this map it points west. Every car that ran off the edge
+     or had to be lifted went west, and stayed there, because traffic keeps
+     going straight. Measured over the whole map in sixteenths, 73% of all the
+     time any car spent anywhere was spent in the western quarter, the eastern
+     half was all but deserted, and the player — standing in the middle of it
+     — had 0.2 cars in view on average where an even spread gives four.
+
+     So a candidate is judged on how much traffic is already near it, and the
+     emptiest wins. Spreading out is a property the placement has to have on
+     purpose; it does not come for free. */
+  let bestSpot = null, bestClear = -1, bestScore = -Infinity;
+  for (let i = 0; i < 16 && cand.length; i++) {
+    const [n, nb] = cand[Math.floor(Math.random() * cand.length)];
+    const el = Math.hypot(nb.x - n.x, nb.y - n.y) || 1;
+    const x = n.x + (nb.x - n.x) / el * 5, y = n.y + (nb.y - n.y) / el * 5;
+    let clear = Infinity, near = 0;
+    for (const o of CARS) {
+      if (o === c) continue;
+      const d = Math.hypot(o.x - x, o.y - y);
+      if (d < clear) clear = d;
+      if (d < 220) near++;
+    }
+    if (clear < 20) continue;                  // no room at all; next one
+    const score = -near * 10 + Math.min(clear, 60);
+    if (score > bestScore) { bestScore = score; bestClear = clear; bestSpot = [n, nb, x, y]; }
+  }
+  if (!bestSpot) bestClear = 0;
+  if (!bestSpot) return false;
+  const [n, nb, x, y] = bestSpot;
+  c.x = x; c.y = y; c.at = n.k; c.to = nb;
+  c.heading = Math.atan2(nb.y - n.y, nb.x - n.x);
+  /* Come in slower where it is tight, so the car behind is braked for rather
+     than driven into. */
+  c.v = c.vmax * (bestClear < 34 ? 0.3 : 0.55 + Math.random() * 0.4);
+  c.stuck = 0; c.frozen = 0;
+  return true;
 }
 
 function carNext(c) {
@@ -687,20 +838,223 @@ function carNext(c) {
               + ((n.y - here.y) / L) * Math.sin(c.heading);
     /* Much stronger straight-ahead bias than a person gets: traffic runs the
        length of a street, it does not browse. */
-    const score = dot * 4 + Math.random() * 0.7;
+    let score = dot * 4 + Math.random() * 0.7;
+    /* A bus turning into a one-lane Tenderloin street was the single worst
+       thing on the map: twenty-five pixels of vehicle pivoting about a point,
+       with both ends out over the pavement. Muni runs the big streets. */
+    if (c.kind.bus) score += isBig(here.k, k) ? 3.5 : -8;
+    /* Never pick a straight reverse unless there is nothing else. */
+    if (dot < -0.9) score -= 6;
     if (score > bestScore) { bestScore = score; best = n; }
   }
   c.to = best;
 }
 
+/* Where a car actually sits: out of the centre line and into its own lane.
+   The simulation and the draw loop MUST agree about this, so there is one
+   function and they both call it. The offset is taken from the direction of
+   the ROAD rather than the car's eased heading, because positions are always
+   exactly on the centre line but the heading lags round a corner, and for
+   those few frames an offset built from the heading pointed diagonally and
+   carried the drawn car out over the pavement. */
+function lanePos(c) {
+  const half = halfOf(c.at, c.to && c.to.k);
+  const lane = half * (c.kind.id === 'scoot' ? 0.78 : 0.5);
+  let dx = Math.cos(c.heading), dy = Math.sin(c.heading);
+  if (c.to) {
+    const ax = c.to.x - c.x, ay = c.to.y - c.y, l = Math.hypot(ax, ay);
+    if (l > 0.5) { dx = ax / l; dy = ay / l; }
+  }
+  return [c.x - dy * lane, c.y + dx * lane];
+}
+
+/* The nearest vehicle in the way, and how much clear road there is to it.
+
+   This replaced a test that only looked for a car directly ahead in the same
+   lane, with the junctions kept clear separately by a permission scheme. That
+   cannot work, and the measurements said so plainly: permission decides who
+   may ENTER a junction, but a car can come to rest anywhere, so bodies went
+   on overlapping — 3.3 overlapping pairs a frame, in 99% of frames, nearly
+   all of them inside a junction. Tightening the permissions only deadlocked
+   the city (98.6% of traffic stopped, mean speed 0.7) and loosening them let
+   cars drive through each other again.
+
+   So a car now brakes for ANY vehicle whose body lies in the corridor it is
+   about to sweep, whatever lane or direction that vehicle is in. Worked out
+   on the drawn positions, and using each body's true extent across and along
+   the corridor, so that oncoming traffic in its own lane falls outside it
+   while a car crossing a junction broadside does not. Safety stops being a
+   matter of negotiation; the junction rules are left to decide only who goes
+   first, which is all they were ever good for. */
+function obstacle(c) {
+  const hx = Math.cos(c.heading), hy = Math.sin(c.heading);
+  const nx = -hy, ny = hx;
+  const myHalfW = c.kind.wid * 1.15 / 2, myHalfL = c.kind.len * 1.15 / 2;
+  let best = Infinity, who = null;
+  for (const o of CARS) {
+    if (o === c) continue;
+    const dx = o.px - c.px, dy = o.py - c.py;
+    const fwd = dx * hx + dy * hy;
+    if (fwd <= 0 || fwd > 85) continue;
+    /* Only traffic going roughly MY way. A car crossing my path is dealt
+       with by the give-way rule below, which has a time limit on it; letting
+       a crossing car brake me indefinitely is what produced pairs that sat
+       nose to nose for minutes and the queues that grew behind them. */
+    if (Math.cos(o.heading) * hx + Math.sin(o.heading) * hy < 0.25) continue;
+    /* Letting cars ignore scooters was tried, on the reasoning that a scooter
+       rides nearer the kerb and you simply go past one. It is true of a real
+       street and false of this one, where the lane offsets are only a couple
+       of pixels apart: cars drove straight through the scooters instead, and
+       same-direction overlaps went from a few hundred to nearly nine thousand
+       a run. A scooter is traffic like anything else. */
+    const oL = o.kind.len * 1.15 / 2, oW = o.kind.wid * 1.15 / 2;
+    const ux = Math.cos(o.heading), uy = Math.sin(o.heading);
+    /* The rotated body's reach along my normal, and along my heading. */
+    const extN = Math.abs(oL * (ux * nx + uy * ny)) + Math.abs(oW * (-uy * nx + ux * ny));
+    const extF = Math.abs(oL * (ux * hx + uy * hy)) + Math.abs(oW * (-uy * hx + ux * hy));
+    if (Math.abs(dx * nx + dy * ny) > myHalfW + extN) continue;
+    const clear = fwd - myHalfL - extF;
+    if (clear < best) { best = clear; who = o; }
+  }
+  return { clear: best, who, hx, hy };
+}
+
 function stepCars(dt) {
+  /* Everybody's drawn position, once, before anybody looks at anybody else. */
+  for (const c of CARS) { const p = lanePos(c); c.px = p[0]; c.py = p[1]; }
+
   for (const c of CARS) {
-    if (c.frozen > 0) { c.frozen -= dt; continue; }
-    /* It has come to a stop in the middle of the junction. Nobody to honk at. */
-    if (c.kind.lidar && Math.random() < dt * 0.016) { c.frozen = 2 + Math.random() * 4; continue; }
+
+    /* A car that has been going nowhere for twelve seconds, somewhere the
+       player cannot see, is lifted out and put back into the traffic
+       elsewhere. This is what keeps the city from silting up.
+
+       With a fixed fleet of cars a jam is an absorbing state: a queue holds
+       the cars that are in it, the rest of the map empties, and nothing in
+       the rules ever clears it, because every car in the queue is correctly
+       waiting for the one in front. Measured from the spawn the players
+       actually get, rather than from a freshly scattered one, thirty cars
+       went 68% stopped, then 94%, then 89% over consecutive four-minute
+       windows — the map silting up in real time. All the earlier numbers that
+       looked healthy had been measured after scattering the cars by hand,
+       which measures recovery from a clean start and not the state a player
+       would ever be in.
+
+       Taking a car out and bringing it back in is the one move that dissolves
+       a jam without making anybody drive through anybody. Off-screen only, so
+       nothing is ever seen to vanish. */
+    if (c.stuck > 12 && Math.hypot(c.x - me.x, c.y - me.y) > 340 && reenter(c)) continue;
+
+    /* About to run out of road at the edge of the map: drive off it, and come
+       back in somewhere else. Checked a few pixels SHORT of the end, so the
+       nose never hangs over the place where the pavement stops — which is
+       where every single off-road body in the last measurement turned out to
+       be, dead straight and nowhere near a junction. */
+    if (c.to && c.to.to.size === 1
+        && Math.hypot(c.to.x - c.x, c.to.y - c.y) < 7 && reenter(c)) continue;
 
     if (!c.to) { carNext(c); if (!c.to) continue; }
-    let move = c.speed * dt, guard = 0;
+
+    /* ---- how fast do I want to be going? ---- */
+    let target = c.vmax;
+
+    /* It has come to a stop in the middle of the junction. Nobody to honk at.
+       Now that traffic queues, everything behind it queues too, which is
+       exactly what happens and is the funniest thing on the map. The rate is
+       set from the other end: at the first value one Waymo or another was
+       frozen 38% of the time, which is not "now and then", it is a permanent
+       feature of the map. This is about half that. */
+    if (c.frozen > 0) { c.frozen -= dt; target = 0; }
+    else if (c.kind.lidar && Math.random() < dt * 0.007)
+      { c.frozen = 2 + Math.random() * 3.5; target = 0; }
+
+    /* Do not drive into anything. The obstacle's speed counts only in MY
+       direction, so a car crossing my path reads as standing still and I
+       stop for it, while a car in front of me going my way is merely
+       followed at a distance. */
+    const { clear, who, hx, hy } = obstacle(c);
+    if (who) {
+      const theirs = Math.max(0, who.v * (Math.cos(who.heading) * hx
+                                        + Math.sin(who.heading) * hy));
+      /* Follow at a distance that opens up with speed, and converge on the
+         speed of the car in front rather than on a fraction of it.
+
+         The first version of this line took 92% of the leader's speed plus a
+         bit for the gap, which looks harmless and is not: in a platoon it
+         compounds. The second car does 0.92 of the first, the third 0.92 of
+         the second, and by the tenth the back of the queue is down to 0.43 of
+         the front and sinking. Every traffic jam I spent the afternoon
+         chasing round this map was partly that — eight runs out of eight sat
+         between 37% and 86% stopped, and no amount of junction rules was ever
+         going to fix a following law that bleeds speed down the queue. */
+      const want = SAFE + c.v * 0.35;
+      if (clear > SAFE) target = Math.min(target, theirs + (clear - want) * 1.2);
+      else {
+        /* Close enough that the only options are stop or edge forward. If the
+           car in the way has ALSO been going nowhere, waiting for it is
+           waiting for ever: measured, one locked pair at the start of a run
+           never came apart, maxStuck climbed by a second every second, and
+           the queue behind it took the whole city from 17% stopped to 36% in
+           twenty seconds with the mean speed down from 43 to 28. So the two
+           of them compare ranks and the higher one edges through. */
+        const standoff = c.stuck > 1.5 && who.stuck > 1.5;
+        target = Math.min(target, standoff && c.rank > who.rank ? 15 : 0);
+      }
+    }
+
+    /* Slow into a corner. A car does not take a right angle at fifty. */
+    const ddx = c.to.x - c.x, ddy = c.to.y - c.y;
+    const dl = Math.hypot(ddx, ddy) || 1;
+    const align = (ddx / dl) * Math.cos(c.heading) + (ddy / dl) * Math.sin(c.heading);
+    if (align < 0.985) target = Math.min(target, 24 + 52 * Math.max(0, align));
+
+    /* ---- slow for the crossing ----
+       A speed limit, not a negotiation. Everything else I tried here was a
+       rule about who waits for whom — an axis reservation, a do-not-block
+       rule, give-way with a time cap, give-way with fixed precedence — and
+       every one of them invented a fresh way for two cars to wait on each
+       other. The measurements got steadily worse as the rules got cleverer:
+       the last version jammed between 48% and 77% of the traffic on all six
+       independent runs, and the one before it put 28 of 28 cars nose to tail
+       down Van Ness inside eleven seconds.
+
+       A cap on speed cannot do that, because it is never zero. Nobody waits
+       for anybody, so nobody can wait for ever. Cars still queue, because
+       following still applies, and they slow into every crossing, which is
+       what actually reads as order from above. The price is that two cars
+       crossing a junction can clip each other now and then; at this scale a
+       car is about ten pixels long and the overlap lasts a fraction of a
+       second, which is a far smaller fault than a city that stops. */
+    /* 46 over the last 18px, not 30 over the last 26. The slower, wider
+       version was a throughput problem disguised as a courtesy: junctions
+       come about every 100px of road here, and a car that drops to 30 and
+       then needs 43px to climb back to 70 never reaches speed at all, so
+       queues built everywhere. Widening the cap let the map carry 30 cars as
+       freely as it carried 22 before. */
+    if (JUNCTION.has(c.to.k) && dl < 18) target = Math.min(target, 46);
+
+    /* ---- nothing stays stopped for ever ----
+       A car going nowhere for six seconds creeps — but only into road that is
+       actually clear. It used to creep regardless of what was in front of it,
+       and that was worse than the problem it was for: in a queue every car in
+       it reached six seconds, drove into the back of the one ahead, and the
+       whole queue compressed into a heap. Counting the overlaps by direction
+       made it obvious — on the two runs in six that jammed, same-direction
+       overlaps ran to about 6,000 against 1,700 crossing ones, where the good
+       runs had a few hundred. A queue is meant to stay a queue and drain from
+       the front, and with nothing crossing able to block a car any more, the
+       chain of followers down a street always ends at somebody with open road
+       ahead of them. */
+    if (c.stuck > 6) target = Math.max(target, Math.min(12, Math.max(0, clear - 2)));
+
+    /* ---- act on it ---- */
+    target = Math.max(0, target);
+    if (target > c.v) c.v = Math.min(target, c.v + ACCEL * dt);
+    else              c.v = Math.max(target, c.v - BRAKE * dt);
+    c.braking = c.v < c.vmax * 0.55 || c.frozen > 0;
+    c.stuck = c.v < 4 ? c.stuck + dt : 0;
+
+    let move = c.v * dt, guard = 0;
     while (move > 0 && c.to && guard++ < 4) {
       const dx = c.to.x - c.x, dy = c.to.y - c.y;
       const d = Math.hypot(dx, dy);
@@ -709,13 +1063,19 @@ function stepCars(dt) {
         let turn = want - c.heading;
         while (turn > Math.PI) turn -= Math.PI * 2;
         while (turn < -Math.PI) turn += Math.PI * 2;
-        c.heading += turn * Math.min(1, dt * 7);
+        c.heading += turn * Math.min(1, dt * 9);
       }
       if (d <= move) { c.x = c.to.x; c.y = c.to.y; c.at = c.to.k; move -= d; carNext(c); }
       else { c.x += dx / d * move; c.y += dy / d * move; move = 0; }
     }
   }
 }
+
+/* A console hook for measuring traffic, which is the only part of this map
+   that moves on its own and therefore the only part that cannot be checked
+   by reading it. Costs one property on window and nothing per frame. */
+window.__sf = { CARS, PEDS, segs, STREETS, ROADW, nodes, halfOf, KINDS: BAG,
+                stepCars, JUNCTION, EDGES, REENTRY, lanePos };
 
 /* ====================================================================
    STATE
@@ -959,6 +1319,108 @@ const PARKED = ['#8e8a80', '#7d8490', '#8a8176', '#6f7a72', '#938b84',
         b.fillStyle = 'rgba(255,255,248,.22)';         // the windscreen
         b.fillRect(1.1, -1.5, 1.9, 2.5);
         b.restore();
+      }
+    }
+  }
+
+  /* ---- cable car tracks ----
+     Two rails down Hyde, Mason and California, which are the three streets on
+     this map that really carry them: Powell-Hyde and Powell-Mason run the one,
+     the California line runs the other. Nothing else in any American city has
+     these, and from above they are the whole signature — a pair of thin bright
+     lines down the middle of a hill street, with the slot between them. */
+  for (const st of STREETS) {
+    if (st.name !== 'Hyde St' && st.name !== 'Mason St' && st.name !== 'California St') continue;
+    for (const off of [-2.4, 2.4]) {
+      b.strokeStyle = 'rgba(84,78,66,.5)'; b.lineWidth = 1.5;
+      b.beginPath();
+      st.pts.forEach((pt, i) => {
+        const nxt = st.pts[i + 1] || st.pts[i - 1];
+        const dx = nxt[0] - pt[0], dy = nxt[1] - pt[1], m = Math.hypot(dx, dy) || 1;
+        const x = pt[0] - dy / m * off, y = pt[1] + dx / m * off;
+        i ? b.lineTo(x, y) : b.moveTo(x, y);
+      });
+      b.stroke();
+    }
+    /* The slot the grip runs in, darker and dead centre. */
+    b.strokeStyle = 'rgba(70,64,54,.3)'; b.lineWidth = 0.8;
+    trace(st); b.stroke();
+  }
+
+  /* ---- stop bars and red kerbs ----
+     The thick white bar a car stops at, and the painted kerb either side of
+     every corner where nobody may park. Both are things you only notice when
+     they are missing, and the bar now means something: the traffic slows for
+     these crossings rather than sailing through them. */
+  for (const sg of segs) {
+    const half = (ROADW[STREETS[sg.si].kind] || 19) / 2;
+    const [ax, ay] = sg.a, [bx, by] = sg.b;
+    const L = Math.hypot(bx - ax, by - ay) || 1;
+    const ux = (bx - ax) / L, uy = (by - ay) / L;
+    const nx = -uy, ny = ux;
+    for (const c of sg.cuts) {
+      let cross = 9.5;
+      for (const o of segs) {
+        if (o === sg) continue;
+        const [ox, oy] = o.a, [px, py] = o.b;
+        const dx = px - ox, dy = py - oy, Ls = dx*dx + dy*dy || 1;
+        let t = ((c[0]-ox)*dx + (c[1]-oy)*dy) / Ls; t = Math.max(0, Math.min(1, t));
+        if (Math.hypot(c[0]-(ox+dx*t), c[1]-(oy+dy*t)) < 2)
+          cross = Math.max(cross, (ROADW[STREETS[o.si].kind] || 19) / 2);
+      }
+      for (const dir of [1, -1]) {
+        /* The bar sits beyond the crosswalk, across the approaching lane only
+           — the near half of the road. Which half that is comes from the same
+           rule the cars drive by: a vehicle heading along d keeps to the side
+           (-dy, dx), so the lane approaching this corner from this side is
+           the one at -dir. */
+        const d = cross + 10.5;
+        const mx = c[0] + ux * d * dir, my = c[1] + uy * d * dir;
+        if (mx < 0 || my < 0 || mx > WORLD.w || my > WORLD.h) continue;
+        const s = -dir;
+        b.strokeStyle = 'rgba(255,253,244,.6)'; b.lineWidth = 2.1;
+        b.beginPath();
+        b.moveTo(mx + nx * s * 1.1, my + ny * s * 1.1);
+        b.lineTo(mx + nx * s * (half - 0.9), my + ny * s * (half - 0.9));
+        b.stroke();
+
+        /* Red kerb, both sides, running back from the corner. */
+        b.strokeStyle = 'rgba(150,62,48,.42)'; b.lineWidth = 1.6;
+        for (const side of [1, -1]) {
+          const k = half - 0.5;
+          const x0 = c[0] + ux * (cross + 1) * dir + nx * side * k;
+          const y0 = c[1] + uy * (cross + 1) * dir + ny * side * k;
+          const x1 = c[0] + ux * (cross + 16) * dir + nx * side * k;
+          const y1 = c[1] + uy * (cross + 16) * dir + ny * side * k;
+          b.beginPath(); b.moveTo(x0, y0); b.lineTo(x1, y1); b.stroke();
+        }
+      }
+    }
+  }
+
+  /* ---- Muni stops ----
+     A pale pad at the kerb on the two streets the buses actually run, which
+     is where the shelters are. Small, but it is the difference between a red
+     lane that is decoration and one that is a transit street. */
+  for (const st of STREETS) {
+    if (st.name !== 'Market St' && st.name !== 'Van Ness Ave') continue;
+    const half = (ROADW[st.kind] || 19) / 2;
+    for (let i = 0; i < st.pts.length - 1; i++) {
+      const [ax, ay] = st.pts[i], [bx, by] = st.pts[i + 1];
+      const L = Math.hypot(bx - ax, by - ay) || 1;
+      const ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy, ny = ux;
+      for (let t = 90; t < L - 90; t += 215) {
+        for (const side of [1, -1]) {
+          const x = ax + ux * t + nx * side * (half + 1.6);
+          const y = ay + uy * t + ny * side * (half + 1.6);
+          b.save();
+          b.translate(x, y); b.rotate(Math.atan2(uy, ux));
+          b.fillStyle = 'rgba(206,198,176,.85)';
+          b.fillRect(-11, -2.4, 22, 4.8);
+          b.fillStyle = 'rgba(96,88,72,.5)';
+          b.fillRect(-7.5, -1.1, 15, 2.2);          // the shelter roof
+          b.restore();
+        }
       }
     }
   }
@@ -1438,27 +1900,11 @@ function paint() {
     /* Hold the right-hand lane: rotate the heading a quarter turn and step
        off the centre line by half a lane. Without this, oncoming traffic
        drives straight through itself down the middle of every street. */
-    const half = halfOf(c.at, c.to && c.to.k);
-    /* Half-way out from the centre line is the middle of the near lane.
-       Scooters filter nearer the kerb, which is where they really ride. */
-    const lane = half * (c.kind.id === 'scoot' ? 0.78 : 0.5);
-    /* Offset from the direction of the ROAD, not from the car's heading.
-       Positions are always exactly on the centre line — measured, 5,040
-       samples, none off it — but the heading eases round a corner over
-       several frames, so for that moment the lane offset pointed diagonally
-       and carried the drawn car out over the pavement and into the corner
-       of a block. The road does not turn gradually; only the car does. */
-    let dirx = Math.cos(c.heading), diry = Math.sin(c.heading);
-    if (c.to) {
-      const ddx = c.to.x - c.x, ddy = c.to.y - c.y;
-      const dl = Math.hypot(ddx, ddy);
-      if (dl > 0.5) { dirx = ddx / dl; diry = ddy / dl; }
-    }
-    const ox = -diry * lane, oy = dirx * lane;
-    const x = W(c.x + ox), y = H(c.y + oy);
+    /* Exactly where the simulation thinks it is — see lanePos. */
+    const x = W(c.px), y = H(c.py);
     if (x < -60 || y < -60 || x > VW + 60 || y > VH + 60) continue;
     drawVehicle(cx, { x, y, heading: c.heading, scale: carS,
-                      kind: c.kind, braking: c.frozen > 0 });
+                      kind: c.kind, braking: c.braking });
   }
 
   /* everybody else, drawn under you and culled hard — fifty figures is

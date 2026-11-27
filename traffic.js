@@ -26,8 +26,12 @@ export const KINDS = [
     weight: 2, speed: [58, 78] },
   { id: 'car4',  len: 12.6, wid: 6.0, body: '#d7d2c6', glass: '#4f5a62',
     weight: 2, speed: [58, 78] },
+  /* The bus ran at 38-48, which is about right for a bus and quite wrong for
+     this map: nothing can overtake, so one of them at the head of a street
+     set the pace for every car behind it. Still the slowest thing on four
+     wheels, just no longer a cork. */
   { id: 'bus',   len: 25,   wid: 7.4, body: '#ebe7dd', glass: '#54606a',
-    stripe: '#9d2f2a', bus: true, weight: 1, speed: [38, 48] },
+    stripe: '#9d2f2a', bus: true, weight: 1, speed: [46, 56] },
   { id: 'scoot', len: 6.5,  wid: 2.8, body: '#3d4a3f', glass: null,
     weight: 1, speed: [44, 58] },
 ];
